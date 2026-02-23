@@ -106,31 +106,35 @@ struct SessionCardView: View {
 
     private var dotColor: Color {
         if session.needsConfirmation { return .cyan }
+        if session.isInterrupted     { return .orange }
         if session.isWorking         { return .green }
         if session.isForgotten       { return Color(white: 0.45) }
         return .orange
     }
 
-    private var shouldPulse: Bool { session.isWorking }
+    private var shouldPulse: Bool { session.isWorking && !session.isInterrupted }
 
     private var statusLabel: String {
         if session.needsConfirmation { return "needs confirmation" }
+        if session.isInterrupted     { return "waiting for input" }
         if session.isWorking         { return "working" }
-        if session.isForgotten            { return "forgotten" }
+        if session.isForgotten       { return "forgotten" }
         return "waiting for input"
     }
 
     private var labelColor: Color {
         if session.needsConfirmation { return .cyan.opacity(0.9) }
+        if session.isInterrupted     { return .orange.opacity(0.9) }
         if session.isWorking         { return .green.opacity(0.8) }
         if session.isForgotten       { return Color(white: 0.4) }
         return .orange.opacity(0.9)
     }
 
     private var cardBackground: Color {
-        if session.needsConfirmation          { return Color.cyan.opacity(isHovered ? 0.16 : 0.08) }
-        if !session.isWorking && !session.isForgotten { return Color.orange.opacity(isHovered ? 0.16 : 0.08) }
-        if session.isForgotten                { return Color.white.opacity(isHovered ? 0.07 : 0.02) }
+        if session.needsConfirmation                   { return Color.cyan.opacity(isHovered ? 0.16 : 0.08) }
+        if session.isInterrupted                       { return Color.orange.opacity(isHovered ? 0.16 : 0.08) }
+        if !session.isWorking && !session.isForgotten  { return Color.orange.opacity(isHovered ? 0.16 : 0.08) }
+        if session.isForgotten                         { return Color.white.opacity(isHovered ? 0.07 : 0.02) }
         return Color.white.opacity(isHovered ? 0.12 : 0.05)
     }
 

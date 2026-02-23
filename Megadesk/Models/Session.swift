@@ -33,7 +33,12 @@ struct Session: Identifiable, Codable {
         return Date().timeIntervalSince1970 - lastUpdated > 4
     }
 
-    /// Session has been in "waiting" state for >2 minutes — effectively idle.
+    /// Session shows "working" but hasn't had a hook update in >30s — likely interrupted.
+    var isInterrupted: Bool {
+        isWorking && !needsConfirmation && Date().timeIntervalSince1970 - lastUpdated > 30
+    }
+
+    /// Session has been in "waiting" state for >5 minutes — effectively idle.
     var isForgotten: Bool {
         !isWorking && timeInState > 300
     }
