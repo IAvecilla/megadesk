@@ -62,8 +62,19 @@ final class StatusStore {
             loaded.append(session)
         }
 
+        // Deduplicate by iTerm session ID — one terminal tab = one card
+        var seen: [String: Session] = [:]
+        for s in loaded {
+            if let existing = seen[s.itermSessionId] {
+                if s.lastUpdated > existing.lastUpdated { seen[s.itermSessionId] = s }
+            } else {
+                seen[s.itermSessionId] = s
+            }
+        }
+        let deduped = Array(seen.values)
+
         // Sort by urgency: needs confirmation → waiting → working → forgotten
-        sessions = loaded.sorted {
+        sessions = deduped.sorted {
             let p0 = urgencyPriority($0)
             let p1 = urgencyPriority($1)
             if p0 != p1 { return p0 < p1 }

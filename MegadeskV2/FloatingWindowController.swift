@@ -24,7 +24,8 @@ final class FloatingWindowController: NSWindowController {
 
         panel.level = .floating
         panel.titlebarAppearsTransparent = true
-        panel.titleVisibility = .hidden
+        panel.titleVisibility = .visible
+        panel.title = "megadesk"
         panel.isMovableByWindowBackground = true
         panel.backgroundColor = NSColor(white: 0.1, alpha: 0.92)
         panel.isOpaque = false
