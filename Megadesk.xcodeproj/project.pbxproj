@@ -16,6 +16,8 @@
 		AA000007 /* Session.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000007 /* Session.swift */; };
 		AA000008 /* TerminalFocuser.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000008 /* TerminalFocuser.swift */; };
 		AA000009 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AB000011 /* Assets.xcassets */; };
+		AA000010 /* HookInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000012 /* HookInstaller.swift */; };
+		AA000011 /* megadesk-hook.py in Resources */ = {isa = PBXBuildFile; fileRef = AB000013 /* megadesk-hook.py */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -30,6 +32,8 @@
 		AB000009 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		AB000010 /* Megadesk.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Megadesk.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AB000011 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		AB000012 /* HookInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HookInstaller.swift; sourceTree = "<group>"; };
+		AB000013 /* megadesk-hook.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = "megadesk-hook.py"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -53,6 +57,8 @@
 				AB000005 /* SessionCardView.swift */,
 				AB000006 /* StatusStore.swift */,
 				AB000011 /* Assets.xcassets */,
+				AB000012 /* HookInstaller.swift */,
+				AB000013 /* megadesk-hook.py */,
 				AD000002 /* Models */,
 				AD000003 /* Services */,
 				AB000009 /* Info.plist */,
@@ -151,6 +157,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA000009 /* Assets.xcassets in Resources */,
+				AA000011 /* megadesk-hook.py in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -169,6 +176,7 @@
 				AA000006 /* StatusStore.swift in Sources */,
 				AA000007 /* Session.swift in Sources */,
 				AA000008 /* TerminalFocuser.swift in Sources */,
+				AA000010 /* HookInstaller.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -12,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         windowController?.show()
         setupMenuBar()
         primeAutomationPermission()
+        HookInstaller.installIfNeeded()
     }
 
     private func primeAutomationPermission() {
