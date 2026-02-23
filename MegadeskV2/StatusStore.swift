@@ -62,7 +62,7 @@ final class StatusStore {
             loaded.append(session)
         }
 
-        // Sort by urgency: needs confirmation → waiting → working → idle
+        // Sort by urgency: needs confirmation → waiting → working → forgotten
         sessions = loaded.sorted {
             let p0 = urgencyPriority($0)
             let p1 = urgencyPriority($1)
@@ -73,9 +73,9 @@ final class StatusStore {
 
     private func urgencyPriority(_ s: Session) -> Int {
         if s.needsConfirmation { return 0 }
-        if !s.isWorking && !s.isIdle { return 1 }  // fresh waiting
+        if !s.isWorking && !s.isForgotten { return 1 }  // fresh waiting
         if s.isWorking { return 2 }
-        return 3  // idle
+        return 3  // forgotten
     }
 
     private func startWatching() {

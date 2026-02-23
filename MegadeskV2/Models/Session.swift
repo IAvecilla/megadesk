@@ -34,8 +34,8 @@ struct Session: Identifiable, Codable {
     }
 
     /// Session has been in "waiting" state for >2 minutes — effectively idle.
-    var isIdle: Bool {
-        !isWorking && timeInState > 120
+    var isForgotten: Bool {
+        !isWorking && timeInState > 300
     }
 
     enum CodingKeys: String, CodingKey {
