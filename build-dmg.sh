@@ -25,7 +25,9 @@ echo "→ Creating DMG..."
 rm -f "$TMP_DMG" "$DMG_OUT"
 hdiutil create -size 20m -fs HFS+ -volname "$VOLUME" "$TMP_DMG" -quiet
 
-MOUNT=$(hdiutil attach "$TMP_DMG" -readwrite -noverify -noautoopen | grep "Apple_HFS" | awk '{print $NF}')
+MOUNT="/tmp/megadesk-mount"
+mkdir -p "$MOUNT"
+hdiutil attach "$TMP_DMG" -readwrite -noverify -noautoopen -mountpoint "$MOUNT" -quiet
 echo "  Mounted at $MOUNT"
 
 cp -r "$APP_PATH" "$MOUNT/"
