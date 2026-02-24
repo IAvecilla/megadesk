@@ -1,10 +1,12 @@
 import AppKit
 import SwiftUI
+import Carbon.HIToolbox
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var windowController: FloatingWindowController?
     private var statusItem: NSStatusItem?
     private var onboardingController: OnboardingWindowController?
+    private var hotKeyRef: EventHotKeyRef?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Terminate any previously running instance before setting up.
@@ -18,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         windowController = FloatingWindowController(contentView: contentView)
         windowController?.window?.delegate = self
         setupMenuBar()
+        registerGlobalHotKey()
 
         if UserDefaults.standard.bool(forKey: "megadesk.onboardingComplete") {
             windowController?.show()
@@ -35,6 +38,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         false
     }
 
+    // MARK: - Global hotkey (⌘⇧M)
+
+    private func registerGlobalHotKey() {
+        var hotKeyID = EventHotKeyID()
+        hotKeyID.signature = 0x4d47444b  // 'MGDK'
+        hotKeyID.id = 1
+
+        var eventSpec = EventTypeSpec(
+            eventClass: OSType(kEventClassKeyboard),
+            eventKind: UInt32(kEventHotKeyPressed)
+        )
+
+        let selfPtr = Unmanaged.passUnretained(self).toOpaque()
+        InstallEventHandler(
+            GetApplicationEventTarget(),
+            { _, _, userData -> OSStatus in
+                guard let ptr = userData else { return noErr }
+                DispatchQueue.main.async {
+                    Unmanaged<AppDelegate>.fromOpaque(ptr).takeUnretainedValue().windowController?.toggle()
+                }
+                return noErr
+            },
+            1,
+            &eventSpec,
+            selfPtr,
+            nil
+        )
+
+        RegisterEventHotKey(
+            UInt32(kVK_ANSI_M),
+            UInt32(cmdKey | shiftKey),
+            hotKeyID,
+            GetApplicationEventTarget(),
+            OptionBits(0),
+            &hotKeyRef
+        )
+    }
+
     // MARK: - Menu bar
 
     private func setupMenuBar() {
@@ -47,8 +88,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let menu = NSMenu()
         menu.delegate = self
-        menu.addItem(withTitle: "Hide Widget", action: #selector(toggleWidget), keyEquivalent: "")
-            .target = self
+        let toggleItem = menu.addItem(withTitle: "Hide Widget", action: #selector(toggleWidget), keyEquivalent: "M")
+        toggleItem.target = self
         let compactItem = NSMenuItem(title: "Compact Mode", action: #selector(toggleCompact), keyEquivalent: "")
         compactItem.target = self
         menu.addItem(compactItem)
