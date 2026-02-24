@@ -1,6 +1,68 @@
 import SwiftUI
 import AppKit
 
+/// NSViewRepresentable wrapping NSTextField that enforces a character limit at the
+/// AppKit level, catching both keyboard and paste input reliably.
+private struct LimitedTextField: NSViewRepresentable {
+    @Binding var text: String
+    let limit: Int
+    let font: NSFont
+    let onCommit: () -> Void
+    let onCancel: () -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    func makeNSView(context: Context) -> NSTextField {
+        let tf = NSTextField()
+        tf.isBordered = false
+        tf.drawsBackground = false
+        tf.textColor = .white
+        tf.font = font
+        tf.focusRingType = .none
+        tf.delegate = context.coordinator
+        tf.stringValue = text
+        return tf
+    }
+
+    func updateNSView(_ tf: NSTextField, context: Context) {
+        if tf.stringValue != text { tf.stringValue = text }
+        // Request focus on the next run-loop tick after the view is installed
+        if context.coordinator.needsFocus {
+            context.coordinator.needsFocus = false
+            DispatchQueue.main.async {
+                tf.window?.makeFirstResponder(tf)
+            }
+        }
+    }
+
+    final class Coordinator: NSObject, NSTextFieldDelegate {
+        var parent: LimitedTextField
+        var needsFocus = true
+
+        init(_ parent: LimitedTextField) { self.parent = parent }
+
+        func controlTextDidChange(_ obj: Notification) {
+            guard let tf = obj.object as? NSTextField else { return }
+            let capped = String(tf.stringValue.prefix(parent.limit))
+            if tf.stringValue != capped { tf.stringValue = capped }
+            parent.text = capped
+        }
+
+        func control(_ control: NSControl, textView: NSTextView,
+                     doCommandBy selector: Selector) -> Bool {
+            if selector == #selector(NSResponder.insertNewline(_:)) {
+                parent.onCommit()
+                return true
+            }
+            if selector == #selector(NSResponder.cancelOperation(_:)) {
+                parent.onCancel()
+                return true
+            }
+            return false
+        }
+    }
+}
+
 /// Transparent overlay that installs an NSTrackingArea with .activeAlways so the
 /// pointing-hand cursor fires even in a nonactivatingPanel (which is never the key window).
 private struct PointingHandCursor: NSViewRepresentable {
@@ -42,7 +104,6 @@ struct SessionCardView: View {
     @State private var isHovered = false
     @State private var isEditing = false
     @State private var editText = ""
-    @FocusState private var fieldFocused: Bool
 
     var body: some View {
         // When editing, drop the outer Button so it doesn't intercept the space key
@@ -65,16 +126,14 @@ struct SessionCardView: View {
             // Left column: name/TextField + status
             VStack(alignment: .leading, spacing: 2) {
                 if isEditing {
-                    TextField("", text: Binding(
-                        get: { editText },
-                        set: { editText = String($0.prefix(15)) }
-                    ))
-                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                    .foregroundColor(.white)
-                    .textFieldStyle(.plain)
-                    .focused($fieldFocused)
-                    .onSubmit { commitEdit() }
-                    .onExitCommand { cancelEdit() }
+                    LimitedTextField(
+                        text: $editText,
+                        limit: 15,
+                        font: .monospacedSystemFont(ofSize: 13, weight: .semibold),
+                        onCommit: commitEdit,
+                        onCancel: cancelEdit
+                    )
+                    .frame(height: 18)
                 } else {
                     Text(displayName)
                         .font(.system(size: 13, weight: .semibold, design: .monospaced))
@@ -144,9 +203,6 @@ struct SessionCardView: View {
         editText = displayName
         isEditing = true
         onEditStart()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-            fieldFocused = true
-        }
     }
 
     private func commitEdit() {

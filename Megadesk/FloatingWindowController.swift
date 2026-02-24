@@ -23,7 +23,9 @@ final class FloatingWindowController: NSWindowController {
 
     convenience init(contentView: some View) {
         let initialCompact = UserDefaults.standard.bool(forKey: "megadesk.compact")
-        let initialWidth: CGFloat = initialCompact ? 78 : 280
+        let savedWidth = UserDefaults.standard.double(forKey: "megadesk.windowWidth")
+        let normalWidth: CGFloat = savedWidth > 0 ? max(220, min(280, CGFloat(savedWidth))) : 280
+        let initialWidth: CGFloat = initialCompact ? 78 : normalWidth
         let panel = EditablePanel(
             contentRect: NSRect(x: 0, y: 0, width: initialWidth, height: 120),
             styleMask: [
@@ -65,6 +67,14 @@ final class FloatingWindowController: NSWindowController {
         self.init(window: panel)
 
         installTitlebarControls(in: panel, compact: initialCompact)
+
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.didResizeNotification,
+            object: panel,
+            queue: .main
+        ) { [weak self] _ in
+            self?.handleWindowResize()
+        }
     }
 
     // MARK: - Title bar controls
@@ -105,6 +115,18 @@ final class FloatingWindowController: NSWindowController {
 
     @objc private func customClosePressed() {
         hide()
+    }
+
+    private func handleWindowResize() {
+        guard let panel = window else { return }
+        // Re-center title label
+        if let label = titleLabel, let superview = label.superview {
+            label.frame.origin.x = (superview.bounds.width - label.frame.width) / 2
+        }
+        // Persist width only in normal mode
+        if !isCompact {
+            UserDefaults.standard.set(Double(panel.frame.width), forKey: "megadesk.windowWidth")
+        }
     }
 
     // MARK: - State

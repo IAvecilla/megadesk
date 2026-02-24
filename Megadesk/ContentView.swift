@@ -43,7 +43,7 @@ struct ContentView: View {
             }
         }
         .padding(8)
-        .frame(minWidth: isCompact ? 78 : 280, maxWidth: isCompact ? 78 : 280)
+        .frame(minWidth: isCompact ? 78 : 220, maxWidth: isCompact ? 78 : 280)
     }
 
     private var emptyState: some View {
