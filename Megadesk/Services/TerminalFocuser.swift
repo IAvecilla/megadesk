@@ -2,16 +2,18 @@ import Foundation
 import AppKit
 
 struct TerminalFocuser {
-    static func focusiTerm2(sessionId: String) {
+    @discardableResult
+    static func focusiTerm2(sessionId: String) -> Bool {
         // sessionId is the bare UUID (hook script strips the "w0t0p0:" prefix).
         // Inside tmux the format is "{uuid}:{tmux_pane}" — strip the suffix.
         let rawId = sessionId.components(separatedBy: ":").first ?? sessionId
-        guard !rawId.isEmpty else { return }
+        guard !rawId.isEmpty else { return false }
 
         // `tell s to select` is the canonical iTerm2 AppleScript call:
         // it switches the tab, selects the session, and brings the window to front
         // in one atomic operation — avoids the race where `set current tab`
         // fails when the window is already frontmost.
+        // Returns true if the session was found, false otherwise.
         let script = """
         tell application "iTerm2"
             repeat with w in windows
@@ -22,11 +24,12 @@ struct TerminalFocuser {
                             tell s to select
                             tell w to select
                             activate
-                            return
+                            return true
                         end if
                     end repeat
                 end repeat
             end repeat
+            return false
         end tell
         """
 
@@ -37,12 +40,15 @@ struct TerminalFocuser {
 
         var error: NSDictionary?
         if let appleScript = NSAppleScript(source: script) {
-            appleScript.executeAndReturnError(&error)
+            let result = appleScript.executeAndReturnError(&error)
             if let error {
                 print("[Megadesk] AppleScript error: \(error)")
                 showPermissionAlert()
+                return false
             }
+            return result.booleanValue
         }
+        return false
     }
 
     private static var hasShownPermissionAlert = false

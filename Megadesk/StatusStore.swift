@@ -38,7 +38,8 @@ final class StatusStore {
         if dirFD >= 0 { close(dirFD) }
     }
 
-    func focusTerminal(session: Session) {
+    @discardableResult
+    func focusTerminal(session: Session) -> Bool {
         TerminalFocuser.focusiTerm2(sessionId: session.itermSessionId)
     }
 

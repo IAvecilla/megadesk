@@ -96,7 +96,8 @@ struct SessionCardView: View {
     let tick: Int
     let displayName: String
     let hasCustomName: Bool
-    let onFocus: () -> Void
+    let onFocus: () -> Bool
+    let onDismiss: () -> Void
     let onRename: (String) -> Void
     let onEditStart: () -> Void
     let onEditEnd: () -> Void
@@ -104,6 +105,7 @@ struct SessionCardView: View {
     @State private var isHovered = false
     @State private var isEditing = false
     @State private var editText = ""
+    @State private var isDying = false
 
     var body: some View {
         // When editing, drop the outer Button so it doesn't intercept the space key
@@ -111,7 +113,7 @@ struct SessionCardView: View {
             if isEditing {
                 cardContent
             } else {
-                Button(action: onFocus) { cardContent }.buttonStyle(.plain)
+                Button(action: handleFocus) { cardContent }.buttonStyle(.plain)
             }
         }
         .background(PointingHandCursor())
@@ -197,6 +199,18 @@ struct SessionCardView: View {
         .contentShape(Rectangle())
     }
 
+    // MARK: - Focus / dismiss
+
+    private func handleFocus() {
+        guard !isDying else { return }
+        if !onFocus() {
+            isDying = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                onDismiss()
+            }
+        }
+    }
+
     // MARK: - Edit actions
 
     private func startEdit() {
@@ -225,15 +239,17 @@ struct SessionCardView: View {
     // MARK: - Derived appearance
 
     private var dotColor: Color {
+        if isDying                   { return .red }
         if session.needsConfirmation { return .cyan }
         if session.isWorking         { return .green }
         if session.isForgotten       { return Color(white: 0.45) }
         return .orange
     }
 
-    private var shouldPulse: Bool { session.isWorking }
+    private var shouldPulse: Bool { session.isWorking && !isDying }
 
     private var statusLabel: String {
+        if isDying                   { return "terminal not found · deleting..." }
         if session.needsConfirmation { return "needs confirmation" }
         if session.isWorking         { return "working" }
         if session.isForgotten       { return "forgotten" }
@@ -241,6 +257,7 @@ struct SessionCardView: View {
     }
 
     private var labelColor: Color {
+        if isDying                   { return .red.opacity(0.8) }
         if session.needsConfirmation { return .cyan.opacity(0.9) }
         if session.isWorking         { return .green.opacity(0.8) }
         if session.isForgotten       { return Color(white: 0.4) }
@@ -248,6 +265,7 @@ struct SessionCardView: View {
     }
 
     private var cardBackground: Color {
+        if isDying                                     { return Color.red.opacity(isHovered ? 0.12 : 0.06) }
         if session.needsConfirmation                   { return Color.cyan.opacity(isHovered ? 0.16 : 0.08) }
         if !session.isWorking && !session.isForgotten  { return Color.orange.opacity(isHovered ? 0.16 : 0.08) }
         if session.isForgotten                         { return Color.white.opacity(isHovered ? 0.07 : 0.02) }

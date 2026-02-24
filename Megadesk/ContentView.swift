@@ -24,7 +24,8 @@ struct ContentView: View {
                             session: session,
                             tick: store.tick,
                             displayName: store.displayName(for: session),
-                            onFocus: { store.focusTerminal(session: session) }
+                            onFocus: { store.focusTerminal(session: session) },
+                            onDismiss: { store.dismiss(session: session) }
                         )
                     } else {
                         SessionCardView(
@@ -33,6 +34,7 @@ struct ContentView: View {
                             displayName: store.displayName(for: session),
                             hasCustomName: store.hasCustomName(for: session),
                             onFocus: { store.focusTerminal(session: session) },
+                            onDismiss: { store.dismiss(session: session) },
                             onRename: { name in store.setCustomName(session: session, name: name) },
                             onEditStart: beginEditing,
                             onEditEnd: endEditing

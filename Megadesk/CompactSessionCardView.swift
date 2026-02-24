@@ -4,12 +4,14 @@ struct CompactSessionCardView: View {
     let session: Session
     let tick: Int
     let displayName: String
-    let onFocus: () -> Void
+    let onFocus: () -> Bool
+    let onDismiss: () -> Void
 
     @State private var isHovered = false
+    @State private var isDying = false
 
     var body: some View {
-        Button(action: onFocus) {
+        Button(action: handleFocus) {
             VStack(spacing: 3) {
                 StatusDot(color: dotColor, pulse: shouldPulse)
                 Text(displayName.prefix(4))
@@ -32,18 +34,32 @@ struct CompactSessionCardView: View {
         }
     }
 
+    // MARK: - Focus / dismiss
+
+    private func handleFocus() {
+        guard !isDying else { return }
+        if !onFocus() {
+            isDying = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                onDismiss()
+            }
+        }
+    }
+
     // MARK: - Derived appearance (mirrors SessionCardView)
 
     private var dotColor: Color {
+        if isDying                   { return .red }
         if session.needsConfirmation { return .cyan }
         if session.isWorking         { return .green }
         if session.isForgotten       { return Color(white: 0.45) }
         return .orange
     }
 
-    private var shouldPulse: Bool { session.isWorking }
+    private var shouldPulse: Bool { session.isWorking && !isDying }
 
     private var cardBackground: Color {
+        if isDying                                     { return Color.red.opacity(isHovered ? 0.12 : 0.06) }
         if session.needsConfirmation                   { return Color.cyan.opacity(isHovered ? 0.16 : 0.08) }
         if !session.isWorking && !session.isForgotten  { return Color.orange.opacity(isHovered ? 0.16 : 0.08) }
         if session.isForgotten                         { return Color.white.opacity(isHovered ? 0.07 : 0.02) }
