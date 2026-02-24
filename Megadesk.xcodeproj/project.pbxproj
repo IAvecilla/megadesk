@@ -21,16 +21,16 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXShellScriptBuildPhase section */
-		AC000004 /* Inject Build Date */ = {
+		AC000004 /* Inject Build Number */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = ();
 			inputPaths = ();
-			name = "Inject Build Date";
+			name = "Inject Build Number";
 			outputPaths = ();
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "PLIST=\"${BUILT_PRODUCTS_DIR}/${INFOPLIST_PATH}\"\npython3 -c \"\nimport plistlib, datetime\nwith open('${PLIST}', 'rb') as f:\n    d = plistlib.load(f)\nd['MegadeskBuildDate'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')\nwith open('${PLIST}', 'wb') as f:\n    plistlib.dump(d, f)\n\"\n";
+			shellScript = "BUILD=$(git -C \"$SRCROOT\" rev-list --count HEAD 2>/dev/null || echo 0)\n/usr/libexec/PlistBuddy -c \"Set :CFBundleVersion $BUILD\" \"${BUILT_PRODUCTS_DIR}/${INFOPLIST_PATH}\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -122,6 +122,7 @@
 				AC000002 /* Sources */,
 				AC000001 /* Frameworks */,
 				AC000003 /* Resources */,
+				AC000004 /* Inject Build Number */,
 			);
 			buildRules = (
 			);

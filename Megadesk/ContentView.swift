@@ -18,8 +18,8 @@ struct ContentView: View {
                 }
             }
             if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String {
-                let date = buildDate
-                Text("v\(version)  \(date)")
+                let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
+                Text("v\(version)  build \(build)")
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundColor(.white.opacity(0.2))
                     .frame(maxWidth: .infinity, alignment: .trailing)
@@ -28,15 +28,6 @@ struct ContentView: View {
         }
         .padding(8)
         .frame(minWidth: 280, maxWidth: 280)
-    }
-
-    private var buildDate: String {
-        guard let url = Bundle.main.executableURL,
-              let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
-              let date = attrs[.modificationDate] as? Date else { return "" }
-        let fmt = DateFormatter()
-        fmt.dateFormat = "yyyy-MM-dd HH:mm"
-        return fmt.string(from: date)
     }
 
     private var emptyState: some View {
