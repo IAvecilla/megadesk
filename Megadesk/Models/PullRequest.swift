@@ -5,6 +5,7 @@ struct PullRequest: Identifiable, Codable {
     let title: String
     let author: PRAuthor
     let headRefName: String
+    let state: String            // "OPEN" | "CLOSED" | "MERGED"
     let mergeable: String        // "MERGEABLE" | "CONFLICTING" | "UNKNOWN"
     let mergeStateStatus: String // "CLEAN" | "BEHIND" | "BLOCKED" | "DIRTY" | "UNKNOWN"
     let statusCheckRollup: [StatusCheck]
@@ -12,6 +13,8 @@ struct PullRequest: Identifiable, Codable {
     let updatedAt: String
 
     var id: Int { number }
+    var isMerged: Bool  { state == "MERGED" }
+    var isClosed: Bool  { state == "CLOSED" }
     var hasConflicts: Bool { mergeable == "CONFLICTING" }
     var isBehindMain: Bool { mergeStateStatus == "BEHIND" }
     var shortBranch: String { headRefName.components(separatedBy: "/").last ?? headRefName }
@@ -19,18 +22,35 @@ struct PullRequest: Identifiable, Codable {
     enum CIStatus { case pending, passing, failing, none }
     var ciStatus: CIStatus {
         guard !statusCheckRollup.isEmpty else { return .none }
+
+        // Pass 1 — failures take priority
+        // CheckRun: conclusion is FAILURE/ERROR/TIMED_OUT
+        // StatusContext: state is FAILURE/ERROR
+        let failingConclusions: Set<String> = ["FAILURE", "ERROR", "TIMED_OUT", "ACTION_REQUIRED"]
+        let failingStates:      Set<String> = ["FAILURE", "ERROR"]
         if statusCheckRollup.contains(where: {
-            ["FAILURE", "ERROR", "TIMED_OUT"].contains($0.conclusion ?? "")
+            failingConclusions.contains($0.conclusion?.uppercased() ?? "_") ||
+            failingStates.contains($0.state?.uppercased() ?? "_")
         }) { return .failing }
+
+        // Pass 2 — any check still running
+        // CheckRun: status is IN_PROGRESS/QUEUED/REQUESTED/WAITING
+        // StatusContext: state is PENDING/EXPECTED
+        let runningStatuses: Set<String> = ["IN_PROGRESS", "QUEUED", "REQUESTED", "WAITING"]
+        let pendingStates:   Set<String> = ["PENDING", "EXPECTED"]
         if statusCheckRollup.contains(where: {
-            $0.conclusion == nil || ["PENDING", "IN_PROGRESS"].contains($0.state ?? "")
+            runningStatuses.contains($0.status?.uppercased() ?? "_") ||
+            pendingStates.contains($0.state?.uppercased() ?? "_")
         }) { return .pending }
+
         return .passing
     }
 }
 
 struct PRAuthor: Codable { let login: String }
-struct StatusCheck: Codable { let state: String?; let conclusion: String? }
+// CheckRun fields: status (IN_PROGRESS/QUEUED/COMPLETED…) + conclusion (SUCCESS/FAILURE…/null)
+// StatusContext fields: state (SUCCESS/FAILURE/PENDING/ERROR) — no status or conclusion
+struct StatusCheck: Codable { let state: String?; let status: String?; let conclusion: String? }
 
 struct TrackedPR: Identifiable {
     let repo: String    // "owner/repo"

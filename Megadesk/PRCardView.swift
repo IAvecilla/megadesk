@@ -12,16 +12,14 @@ struct PRCardView: View {
 
     var body: some View {
         Group {
-            switch trackedPR.fetchState {
-            case .loading:
-                loadingCard
-            case .error(let msg):
-                errorCard(msg)
-            default:
-                if let pr = trackedPR.data {
-                    loadedCard(pr)
-                } else {
-                    loadingCard
+            if let pr = trackedPR.data {
+                // Always keep showing existing data; state drives subtle indicators inside the card.
+                loadedCard(pr)
+            } else {
+                switch trackedPR.fetchState {
+                case .loading:         loadingCard
+                case .error(let msg):  errorCard(msg)
+                default:               loadingCard
                 }
             }
         }
@@ -119,9 +117,15 @@ struct PRCardView: View {
                 Spacer()
 
                 VStack(alignment: .trailing, spacing: 2) {
-                    Text(relativeDate(pr.updatedAt))
-                        .font(.system(size: 10, design: .monospaced))
-                        .foregroundColor(.white.opacity(0.35))
+                    if trackedPR.fetchState == .loading {
+                        ProgressView()
+                            .scaleEffect(0.45)
+                            .frame(width: 10, height: 10)
+                    } else {
+                        Text(relativeDate(pr.updatedAt))
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundColor(.white.opacity(0.35))
+                    }
 
                     HStack(spacing: 3) {
                         if pr.hasConflicts { badge("conflict", color: .red) }
@@ -200,6 +204,8 @@ struct PRCardView: View {
     }
 
     private func dotColor(_ pr: PullRequest) -> Color {
+        if pr.isMerged { return .cyan }
+        if pr.isClosed { return Color(white: 0.45) }
         switch pr.ciStatus {
         case .failing: return .red
         case .pending: return .orange
@@ -209,6 +215,8 @@ struct PRCardView: View {
     }
 
     private func loadedBackground(_ pr: PullRequest) -> Color {
+        if pr.isMerged { return Color.cyan.opacity(isHovered ? 0.12 : 0.06) }
+        if pr.isClosed { return Color.white.opacity(isHovered ? 0.07 : 0.02) }
         switch pr.ciStatus {
         case .failing: return Color.red.opacity(isHovered ? 0.16 : 0.08)
         case .pending: return Color.orange.opacity(isHovered ? 0.16 : 0.08)
@@ -246,6 +254,8 @@ struct CompactPRCardView: View {
         guard trackedPR.fetchState == .loaded, let pr = trackedPR.data else {
             return Color(white: 0.45)
         }
+        if pr.isMerged { return .cyan }
+        if pr.isClosed { return Color(white: 0.45) }
         switch pr.ciStatus {
         case .failing: return .red
         case .pending: return .orange
@@ -258,6 +268,8 @@ struct CompactPRCardView: View {
         guard let pr = trackedPR.data else {
             return Color.white.opacity(isHovered ? 0.10 : 0.04)
         }
+        if pr.isMerged { return Color.cyan.opacity(isHovered ? 0.12 : 0.06) }
+        if pr.isClosed { return Color.white.opacity(isHovered ? 0.07 : 0.02) }
         switch pr.ciStatus {
         case .failing: return Color.red.opacity(isHovered ? 0.16 : 0.08)
         case .pending: return Color.orange.opacity(isHovered ? 0.16 : 0.08)

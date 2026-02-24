@@ -86,7 +86,31 @@ struct ContentView: View {
         addPRRow
     }
 
-    private var prSectionHeader: some View { sectionLabel("pull requests") }
+    private var prSectionHeader: some View {
+        let countdown = prRefreshCountdown
+        return HStack(spacing: 6) {
+            Text("pull requests")
+                .font(.system(size: 9, weight: .medium, design: .monospaced))
+                .foregroundColor(.white.opacity(0.2))
+                .fixedSize()
+            Rectangle()
+                .fill(Color.white.opacity(0.07))
+                .frame(height: 1)
+            Text("\(countdown)s")
+                .font(.system(size: 9, weight: .medium, design: .monospaced))
+                .foregroundColor(.white.opacity(0.2))
+                .fixedSize()
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 4)
+        .padding(.bottom, 2)
+    }
+
+    private var prRefreshCountdown: Int {
+        let _ = store.tick  // re-evaluate every second
+        guard let last = store.prLastFetchedAt else { return 60 }
+        return max(0, 60 - Int(Date().timeIntervalSince(last)))
+    }
 
     private func sectionLabel(_ title: String) -> some View {
         HStack(spacing: 6) {

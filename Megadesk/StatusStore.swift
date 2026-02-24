@@ -9,6 +9,7 @@ final class StatusStore {
 
     // MARK: PR Tracking
     var trackedPRs: [TrackedPR] = []
+    var prLastFetchedAt: Date?
     private var prTimer: Timer?
 
     private let sessionsURL: URL = {
@@ -189,6 +190,7 @@ final class StatusStore {
     }
 
     func fetchAllPRs() {
+        prLastFetchedAt = Date()
         for pr in trackedPRs {
             fetchPR(repo: pr.repo, number: pr.number)
         }
@@ -210,7 +212,7 @@ final class StatusStore {
         process.arguments = [
             "pr", "view", "\(number)",
             "--repo", repo,
-            "--json", "number,title,author,headRefName,mergeable,mergeStateStatus,statusCheckRollup,url,updatedAt"
+            "--json", "number,title,author,headRefName,state,mergeable,mergeStateStatus,statusCheckRollup,url,updatedAt"
         ]
 
         let pipe = Pipe()
