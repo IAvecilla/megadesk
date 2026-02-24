@@ -40,7 +40,11 @@ final class StatusStore {
 
     @discardableResult
     func focusTerminal(session: Session) -> Bool {
-        TerminalFocuser.focusiTerm2(sessionId: session.itermSessionId)
+        // Fallback sessions (itermSessionId == sessionId) have no associated iTerm2 tab —
+        // $ITERM_SESSION_ID wasn't available (e.g. tmux without the env var, or non-iTerm2
+        // terminal). We can't focus them but they're not "not found" either.
+        guard session.itermSessionId != session.sessionId else { return true }
+        return TerminalFocuser.focusiTerm2(sessionId: session.itermSessionId)
     }
 
     func displayName(for session: Session) -> String {
