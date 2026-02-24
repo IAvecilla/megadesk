@@ -93,6 +93,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let compactItem = NSMenuItem(title: "Compact Mode", action: #selector(toggleCompact), keyEquivalent: "")
         compactItem.target = self
         menu.addItem(compactItem)
+        let prItem = NSMenuItem(title: "Show PR Tracking", action: #selector(togglePRTracking), keyEquivalent: "")
+        prItem.target = self
+        prItem.tag = 10
+        menu.addItem(prItem)
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Megadesk", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         statusItem?.menu = menu
@@ -105,6 +109,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func toggleCompact() {
         windowController?.toggleCompact()
     }
+
+    @objc private func togglePRTracking() {
+        let key = "megadesk.prTracking"
+        let current = UserDefaults.standard.object(forKey: key) as? Bool ?? true
+        UserDefaults.standard.set(!current, forKey: key)
+    }
 }
 
 // MARK: - NSMenuDelegate — refresh title before menu appears
@@ -114,6 +124,8 @@ extension AppDelegate: NSMenuDelegate {
         let isVisible = windowController?.isWidgetVisible ?? false
         menu.item(at: 0)?.title = isVisible ? "Hide Widget" : "Show Widget"
         menu.item(at: 1)?.state = (windowController?.isCompact ?? false) ? .on : .off
+        let prEnabled = UserDefaults.standard.object(forKey: "megadesk.prTracking") as? Bool ?? true
+        menu.item(withTag: 10)?.state = prEnabled ? .on : .off
     }
 }
 

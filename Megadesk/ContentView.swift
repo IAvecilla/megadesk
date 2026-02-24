@@ -4,12 +4,17 @@ import AppKit
 struct ContentView: View {
     @State private var store = StatusStore()
     @AppStorage("megadesk.compact") private var isCompact = false
+    @AppStorage("megadesk.prTracking") private var prTrackingEnabled = true
     @State private var previousApp: NSRunningApplication?
     @State private var isAddingPR = false
     @State private var newPRText = ""
 
     var body: some View {
         VStack(spacing: 4) {
+            if prTrackingEnabled {
+                sectionLabel(isCompact ? "s" : "sessions")
+            }
+
             if store.sessions.isEmpty {
                 emptyState
             } else {
@@ -36,10 +41,13 @@ struct ContentView: View {
                 }
             }
 
-            if isCompact {
-                compactPRSection
-            } else {
-                prSection
+            if prTrackingEnabled {
+                if isCompact {
+                    sectionLabel("pr")
+                    compactPRSection
+                } else {
+                    prSection
+                }
             }
 
             if !isCompact, let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String {
@@ -67,20 +75,32 @@ struct ContentView: View {
 
     @ViewBuilder
     private var prSection: some View {
-        if !store.trackedPRs.isEmpty {
-            Divider()
-                .background(Color.white.opacity(0.1))
-                .padding(.vertical, 2)
-
-            ForEach(store.trackedPRs) { tracked in
-                PRCardView(
-                    trackedPR: tracked,
-                    onRefresh: { store.fetchPR(repo: tracked.repo, number: tracked.number) },
-                    onRemove: { store.removeTrackedPR(id: tracked.id) }
-                )
-            }
+        prSectionHeader
+        ForEach(store.trackedPRs) { tracked in
+            PRCardView(
+                trackedPR: tracked,
+                onRefresh: { store.fetchPR(repo: tracked.repo, number: tracked.number) },
+                onRemove: { store.removeTrackedPR(id: tracked.id) }
+            )
         }
         addPRRow
+    }
+
+    private var prSectionHeader: some View { sectionLabel("pull requests") }
+
+    private func sectionLabel(_ title: String) -> some View {
+        HStack(spacing: 6) {
+            Text(title)
+                .font(.system(size: 9, weight: .medium, design: .monospaced))
+                .foregroundColor(.white.opacity(0.2))
+                .fixedSize()
+            Rectangle()
+                .fill(Color.white.opacity(0.07))
+                .frame(height: 1)
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 4)
+        .padding(.bottom, 2)
     }
 
     @ViewBuilder
