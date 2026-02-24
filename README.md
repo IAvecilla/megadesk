@@ -127,6 +127,12 @@ Click the Megadesk icon in the menu bar to access:
 
 ---
 
+## Known Issues
+
+- **Session state may not always update correctly.** Megadesk relies entirely on Claude Code hooks to detect state changes. If a session is interrupted (e.g. you cancel a running task with `Ctrl+C`), the hook may not fire and the card can remain stuck on "working" until the next event arrives. This is a limitation of the hook-based approach rather than something Megadesk can work around on its own.
+
+---
+
 ## How it works
 
 On install, Megadesk copies `megadesk-hook.py` to `~/.claude/` and registers it as a hook for five Claude Code events: `PreToolUse`, `PostToolUse`, `Stop`, `UserPromptSubmit`, and `SessionStart`. Each time one of these fires, the hook writes a small JSON payload to a local socket that Megadesk listens on, updating the session card in real time.
