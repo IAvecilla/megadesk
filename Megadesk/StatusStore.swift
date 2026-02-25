@@ -1,6 +1,7 @@
 import Foundation
 import AppKit
 import Observation
+import Darwin
 
 @Observable
 final class StatusStore {
@@ -206,6 +207,10 @@ final class StatusStore {
             // Reload every tick as a fallback — small JSON files, negligible cost.
             // The file watcher handles instant updates; this catches any missed events.
             self?.loadSessions()
+            // Every 5 seconds, remove cards whose Claude process is no longer running.
+            if (self?.tick ?? 0) % 5 == 0 {
+                self?.checkDeadProcesses()
+            }
             // Every 10 seconds, ask iTerm2 which tabs are still alive and remove orphaned cards.
             if (self?.tick ?? 0) % 10 == 0 {
                 self?.checkOrphanedSessions()
@@ -227,6 +232,18 @@ final class StatusStore {
                 if self.activeSessionId != match.sessionId {
                     self.activeSessionId = match.sessionId
                 }
+            }
+        }
+    }
+
+    /// Removes session cards whose Claude process is no longer running.
+    /// Uses kill(pid, 0) — zero-signal probe that returns false if the process is gone.
+    private func checkDeadProcesses() {
+        for session in sessions {
+            guard let pid = session.claudePid else { continue }
+            let alive = kill(pid_t(pid), 0) == 0 || errno == EPERM
+            if !alive {
+                removeSessionFiles(withItermId: session.itermSessionId)
             }
         }
     }

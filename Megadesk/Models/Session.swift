@@ -9,6 +9,7 @@ struct Session: Identifiable, Codable {
     let toolName: String
     let lastEvent: String
     let itermSessionId: String
+    let claudePid: Int32?
 
     var id: String { sessionId }
 
@@ -48,5 +49,6 @@ struct Session: Identifiable, Codable {
         case toolName = "tool_name"
         case lastEvent = "last_event"
         case itermSessionId = "iterm_session_id"
+        case claudePid = "claude_pid"
     }
 }
