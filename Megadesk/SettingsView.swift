@@ -13,6 +13,16 @@ struct SettingsView: View {
                                 in: 1...120)
                         .onChange(of: settings.forgottenMinutes) { _, _ in settings.save() }
                     }
+                    LabeledContent("Sort sessions") {
+                        Picker("", selection: $settings.sortOrder) {
+                            ForEach(SessionSortOrder.allCases, id: \.self) {
+                                Text($0.label).tag($0)
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .onChange(of: settings.sortOrder) { _, _ in settings.save() }
+                    }
                 }
 
                 Section("Session States") {

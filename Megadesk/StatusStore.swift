@@ -161,13 +161,26 @@ final class StatusStore {
         }
         let deduped = Array(seen.values)
 
-        // Sort by urgency: needs confirmation → waiting → working → forgotten
-        sessions = deduped.sorted {
-            let p0 = urgencyPriority($0)
-            let p1 = urgencyPriority($1)
-            if p0 != p1 { return p0 < p1 }
-            if p0 == 3 { return $0.timeInState < $1.timeInState }
-            return $0.projectName < $1.projectName
+        sessions = sorted(deduped)
+    }
+
+    func sorted(_ list: [Session]) -> [Session] {
+        switch AppSettings.shared.sortOrder {
+        case .byState:
+            return list.sorted {
+                let p0 = urgencyPriority($0), p1 = urgencyPriority($1)
+                if p0 != p1 { return p0 < p1 }
+                if p0 == 3 { return $0.timeInState < $1.timeInState }
+                return $0.projectName < $1.projectName
+            }
+        case .byActivity:
+            return list.sorted { $0.lastUpdated > $1.lastUpdated }
+        case .byName:
+            return list.sorted { $0.projectName < $1.projectName }
+        case .byCreation:
+            return list.sorted {
+                ($0.createdAt ?? $0.stateSince) < ($1.createdAt ?? $1.stateSince)
+            }
         }
     }
 

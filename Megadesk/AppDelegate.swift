@@ -19,6 +19,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .forEach { $0.terminate() }
         }
 
+        // Always update the hook script from the bundle so it stays in sync with the app.
+        try? HookInstaller.install()
+
         let contentView = ContentView()
         windowController = FloatingWindowController(contentView: contentView)
         windowController?.window?.delegate = self

@@ -41,7 +41,7 @@ EVENT_STATE_MAP = {
     "UserPromptSubmit": "working",
     "Stop": "waiting",
     "StopInterrupted": "waiting",
-    "SessionStart": "working",
+    "SessionStart": "waiting",
 }
 
 
@@ -95,13 +95,15 @@ def main():
 
     now = time.time()
 
-    # Read existing data to preserve state_since when state hasn't changed
+    # Read existing data to preserve state_since and created_at across writes
     state_since = now
+    created_at = now
     if session_file.exists():
         try:
             existing = json.loads(session_file.read_text())
             if existing.get("state") == new_state:
                 state_since = existing.get("state_since", now)
+            created_at = existing.get("created_at", now)
         except (json.JSONDecodeError, OSError):
             pass
 
@@ -110,6 +112,7 @@ def main():
         "cwd": cwd,
         "state": new_state,
         "state_since": state_since,
+        "created_at": created_at,
         "last_updated": now,
         "tool_name": tool_name,
         "last_event": hook_event,

@@ -5,6 +5,7 @@ struct Session: Identifiable, Codable {
     let cwd: String
     let state: String
     let stateSince: Double
+    let createdAt: Double?
     let lastUpdated: Double
     let toolName: String
     let lastEvent: String
@@ -45,6 +46,7 @@ struct Session: Identifiable, Codable {
         case cwd
         case state
         case stateSince = "state_since"
+        case createdAt = "created_at"
         case lastUpdated = "last_updated"
         case toolName = "tool_name"
         case lastEvent = "last_event"

@@ -1,5 +1,21 @@
 import SwiftUI
 
+enum SessionSortOrder: String, CaseIterable {
+    case byState    = "state"
+    case byActivity = "activity"
+    case byName     = "name"
+    case byCreation = "creation"
+
+    var label: String {
+        switch self {
+        case .byState:    return "By state"
+        case .byActivity: return "By recent activity"
+        case .byName:     return "By name"
+        case .byCreation: return "By creation"
+        }
+    }
+}
+
 /// Global app settings — colors and behavior. Observable so views react to changes.
 @Observable
 final class AppSettings {
@@ -7,6 +23,7 @@ final class AppSettings {
 
     // MARK: - Behavior
     var forgottenMinutes: Int
+    var sortOrder: SessionSortOrder
 
     // MARK: - Session state colors (stored as hex strings)
     var hexWorking:      String
@@ -36,6 +53,7 @@ final class AppSettings {
     private init() {
         let ud = UserDefaults.standard
         forgottenMinutes = ud.object(forKey: "megadesk.forgottenMinutes") as? Int ?? 5
+        sortOrder = SessionSortOrder(rawValue: ud.string(forKey: "megadesk.sortOrder") ?? "") ?? .byState
         hexWorking       = ud.string(forKey: "megadesk.color.working")      ?? "#34C759"
         hexConfirmation  = ud.string(forKey: "megadesk.color.confirmation") ?? "#5AC8FA"
         hexWaiting       = ud.string(forKey: "megadesk.color.waiting")      ?? "#FF9500"
@@ -49,20 +67,22 @@ final class AppSettings {
 
     func save() {
         let ud = UserDefaults.standard
-        ud.set(forgottenMinutes, forKey: "megadesk.forgottenMinutes")
-        ud.set(hexWorking,       forKey: "megadesk.color.working")
-        ud.set(hexConfirmation,  forKey: "megadesk.color.confirmation")
-        ud.set(hexWaiting,       forKey: "megadesk.color.waiting")
-        ud.set(hexForgotten,     forKey: "megadesk.color.forgotten")
-        ud.set(hexPRPassing,     forKey: "megadesk.color.pr.passing")
-        ud.set(hexPRPending,     forKey: "megadesk.color.pr.pending")
-        ud.set(hexPRFailing,     forKey: "megadesk.color.pr.failing")
-        ud.set(hexPRMerged,      forKey: "megadesk.color.pr.merged")
-        ud.set(hexPRClosed,      forKey: "megadesk.color.pr.closed")
+        ud.set(forgottenMinutes,    forKey: "megadesk.forgottenMinutes")
+        ud.set(sortOrder.rawValue,  forKey: "megadesk.sortOrder")
+        ud.set(hexWorking,          forKey: "megadesk.color.working")
+        ud.set(hexConfirmation,     forKey: "megadesk.color.confirmation")
+        ud.set(hexWaiting,          forKey: "megadesk.color.waiting")
+        ud.set(hexForgotten,        forKey: "megadesk.color.forgotten")
+        ud.set(hexPRPassing,        forKey: "megadesk.color.pr.passing")
+        ud.set(hexPRPending,        forKey: "megadesk.color.pr.pending")
+        ud.set(hexPRFailing,        forKey: "megadesk.color.pr.failing")
+        ud.set(hexPRMerged,         forKey: "megadesk.color.pr.merged")
+        ud.set(hexPRClosed,         forKey: "megadesk.color.pr.closed")
     }
 
     func resetToDefaults() {
         forgottenMinutes = 5
+        sortOrder        = .byState
         hexWorking       = "#34C759"
         hexConfirmation  = "#5AC8FA"
         hexWaiting       = "#FF9500"
