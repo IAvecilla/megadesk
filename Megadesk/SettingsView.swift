@@ -13,6 +13,16 @@ struct SettingsView: View {
                                 in: 1...120)
                         .onChange(of: settings.forgottenMinutes) { _, _ in settings.save() }
                     }
+                    LabeledContent("Widget opacity") {
+                        HStack(spacing: 8) {
+                            Slider(value: $settings.idleOpacity, in: 0.1...1.0)
+                                .frame(width: 120)
+                                .onChange(of: settings.idleOpacity) { _, _ in settings.save() }
+                            Text("\(Int(settings.idleOpacity * 100))%")
+                                .frame(width: 36, alignment: .trailing)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                     LabeledContent("Sort sessions") {
                         Picker("", selection: $settings.sortOrder) {
                             ForEach(SessionSortOrder.allCases, id: \.self) {

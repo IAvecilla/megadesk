@@ -24,6 +24,7 @@ final class AppSettings {
     // MARK: - Behavior
     var forgottenMinutes: Int
     var sortOrder: SessionSortOrder
+    var idleOpacity: Double
 
     // MARK: - Session state colors (stored as hex strings)
     var hexWorking:      String
@@ -53,7 +54,8 @@ final class AppSettings {
     private init() {
         let ud = UserDefaults.standard
         forgottenMinutes = ud.object(forKey: "megadesk.forgottenMinutes") as? Int ?? 5
-        sortOrder = SessionSortOrder(rawValue: ud.string(forKey: "megadesk.sortOrder") ?? "") ?? .byState
+        sortOrder    = SessionSortOrder(rawValue: ud.string(forKey: "megadesk.sortOrder") ?? "") ?? .byState
+        idleOpacity  = ud.object(forKey: "megadesk.idleOpacity") as? Double ?? 1.0
         hexWorking       = ud.string(forKey: "megadesk.color.working")      ?? "#34C759"
         hexConfirmation  = ud.string(forKey: "megadesk.color.confirmation") ?? "#5AC8FA"
         hexWaiting       = ud.string(forKey: "megadesk.color.waiting")      ?? "#FF9500"
@@ -69,6 +71,7 @@ final class AppSettings {
         let ud = UserDefaults.standard
         ud.set(forgottenMinutes,    forKey: "megadesk.forgottenMinutes")
         ud.set(sortOrder.rawValue,  forKey: "megadesk.sortOrder")
+        ud.set(idleOpacity,         forKey: "megadesk.idleOpacity")
         ud.set(hexWorking,          forKey: "megadesk.color.working")
         ud.set(hexConfirmation,     forKey: "megadesk.color.confirmation")
         ud.set(hexWaiting,          forKey: "megadesk.color.waiting")
@@ -83,6 +86,7 @@ final class AppSettings {
     func resetToDefaults() {
         forgottenMinutes = 5
         sortOrder        = .byState
+        idleOpacity      = 1.0
         hexWorking       = "#34C759"
         hexConfirmation  = "#5AC8FA"
         hexWaiting       = "#FF9500"

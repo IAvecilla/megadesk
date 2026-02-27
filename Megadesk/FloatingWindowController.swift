@@ -23,6 +23,7 @@ final class FloatingWindowController: NSWindowController {
 
     private var titleLabel: NSTextField?
     private var suppressPositionSave = false
+    private var isHovered = false
 
     convenience init(contentView: some View) {
         let initialCompact = UserDefaults.standard.bool(forKey: "megadesk.compact")
@@ -68,6 +69,17 @@ final class FloatingWindowController: NSWindowController {
         panel.standardWindowButton(.zoomButton)?.isHidden = true
 
         self.init(window: panel)
+
+        // Tracking area for hover-based opacity
+        if let cv = panel.contentView {
+            cv.addTrackingArea(NSTrackingArea(
+                rect: .zero,
+                options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                owner: self,
+                userInfo: nil
+            ))
+        }
+        observeOpacity()
 
         installTitlebarControls(in: panel, compact: initialCompact)
 
@@ -157,6 +169,42 @@ final class FloatingWindowController: NSWindowController {
         }
     }
 
+    // MARK: - Hover opacity
+
+    override func mouseEntered(with event: NSEvent) {
+        isHovered = true
+        guard let window, window.isVisible else { return }
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.15
+            window.animator().alphaValue = 1.0
+        }
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        isHovered = false
+        guard let window, window.isVisible else { return }
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.15
+            window.animator().alphaValue = AppSettings.shared.idleOpacity
+        }
+    }
+
+    private func observeOpacity() {
+        withObservationTracking {
+            _ = AppSettings.shared.idleOpacity
+        } onChange: { [weak self] in
+            DispatchQueue.main.async {
+                self?.applyIdleOpacity()
+                self?.observeOpacity()
+            }
+        }
+    }
+
+    private func applyIdleOpacity() {
+        guard let window, window.isVisible, !isHovered else { return }
+        window.alphaValue = AppSettings.shared.idleOpacity
+    }
+
     // MARK: - State
 
     var isWidgetVisible: Bool { window?.isVisible ?? false }
@@ -178,7 +226,7 @@ final class FloatingWindowController: NSWindowController {
         DispatchQueue.main.asyncAfter(deadline: .now() + fadeOutDuration) {
             panel.orderOut(nil)      // fuera del Window Server — todo lo que sigue es invisible
             UserDefaults.standard.set(newValue, forKey: "megadesk.compact")  // SwiftUI re-render mientras invisible
-            panel.alphaValue = 1.0   // reset para show()
+            panel.alphaValue = AppSettings.shared.idleOpacity   // reset para show()
 
             let width: CGFloat = newValue ? 78 : 280
             self.suppressPositionSave = true
@@ -221,7 +269,7 @@ final class FloatingWindowController: NSWindowController {
             NSAnimationContext.runAnimationGroup { ctx in
                 ctx.duration = 0.12
                 ctx.timingFunction = CAMediaTimingFunction(controlPoints: 0, 0, 0.2, 1)
-                window.animator().alphaValue = 1.0
+                window.animator().alphaValue = AppSettings.shared.idleOpacity
             }
         } else {
             window.orderFrontRegardless()
@@ -236,7 +284,7 @@ final class FloatingWindowController: NSWindowController {
             window.animator().alphaValue = 0.0
         }, completionHandler: {
             window.orderOut(nil)
-            window.alphaValue = 1.0
+            window.alphaValue = AppSettings.shared.idleOpacity
         })
     }
 
