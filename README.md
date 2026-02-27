@@ -60,7 +60,7 @@ Each session card has a colored dot indicating Claude's current state:
 | 🟢 Green | **Working** | Claude is actively running a task |
 | 🔵 Cyan | **Needs confirmation** | Waiting for you to approve or deny a tool |
 | 🟠 Orange | **Waiting for input** | Claude finished — your turn to respond |
-| ⚪ Gray | **Forgotten** | Idle for more than 5 minutes |
+| ⚪ Gray | **Forgotten** | Idle for longer than the configured timeout (default: 5 min) |
 
 The time displayed on the right shows how long the session has been in its current state.
 
@@ -114,6 +114,19 @@ Compact Mode collapses each session card into a single colored dot, reducing the
 
 ---
 
+## Settings
+
+Open Settings with `⌘,` or via the menu bar icon.
+
+| Setting | Description |
+|---------|-------------|
+| **Forgotten after** | How long a session must be idle before it turns gray (default: 5 min) |
+| **Widget opacity** | Opacity of the widget when the mouse is not over it. Hover restores full opacity |
+| **Sort sessions** | Order cards by state, last activity, name, or creation time |
+| **Colors** | Customize the dot color for each session and PR state |
+
+---
+
 ## Menu Bar
 
 Click the Megadesk icon in the menu bar to access:
@@ -121,6 +134,7 @@ Click the Megadesk icon in the menu bar to access:
 - **Hide / Show Widget** — same as `⌘⇧M`
 - **Compact Mode** — toggle the condensed view
 - **Show PR Tracking** — show or hide the PR section
+- **Settings** — open the settings panel (`⌘,`)
 - **Help** — opens the reference panel with states, features, and hotkeys
 - **Quit**
 
