@@ -126,12 +126,16 @@ struct PRCardView: View {
                             }
                         }
 
-                    HStack(spacing: 3) {
-                        if pr.hasConflicts { badge("conflict", color: .red) }
-                        if pr.isBehindMain { badge("behind", color: .yellow) }
-                    }
+                    ZStack(alignment: .trailing) {
+                        HStack(spacing: 3) {
+                            if pr.hasConflicts { badge("conflict", color: .red) }
+                            if pr.isBehindMain { badge("behind", color: .yellow) }
+                        }
+                        .opacity(isHovered ? 0 : 1)
+                        .animation(.easeInOut(duration: 0.15), value: isHovered)
 
-                    deleteButton
+                        deleteButton
+                    }
                 }
             }
             .padding(.horizontal, 12)
