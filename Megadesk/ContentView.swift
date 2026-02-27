@@ -58,13 +58,14 @@ struct ContentView: View {
                 HStack {
                     Text("⌘⇧M to hide")
                         .font(.system(size: 10, design: .monospaced))
-                        .foregroundColor(.white.opacity(0.2))
+                        .foregroundColor(.white.opacity(0.65))
                     Spacer()
                     Text("v\(version)  build \(build)")
                         .font(.system(size: 10, design: .monospaced))
                         .foregroundColor(.white.opacity(0.2))
                 }
-                .padding(.top, 2)
+                .padding(.top, 6)
+                .padding(.horizontal, 6)
             }
         }
         .padding(8)

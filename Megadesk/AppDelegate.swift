@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var onboardingController: OnboardingWindowController?
     private var helpController: HelpWindowController?
+    private var settingsController: SettingsWindowController?
     private var hotKeyRef: EventHotKeyRef?
     private var sessionHotKeyRefs: [EventHotKeyRef?] = []
 
@@ -17,6 +18,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .filter { $0 != NSRunningApplication.current }
                 .forEach { $0.terminate() }
         }
+
+        // Always update the hook script from the bundle so it stays in sync with the app.
+        try? HookInstaller.install()
 
         let contentView = ContentView()
         windowController = FloatingWindowController(contentView: contentView)
@@ -143,6 +147,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         prItem.tag = 10
         menu.addItem(prItem)
         menu.addItem(.separator())
+        let settingsItem = NSMenuItem(title: "Settings...", action: #selector(openSettings), keyEquivalent: ",")
+        settingsItem.target = self
+        menu.addItem(settingsItem)
         let helpItem = NSMenuItem(title: "Help", action: #selector(openHelp), keyEquivalent: "")
         helpItem.target = self
         menu.addItem(helpItem)
@@ -162,6 +169,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let key = "megadesk.prTracking"
         let current = UserDefaults.standard.object(forKey: key) as? Bool ?? true
         UserDefaults.standard.set(!current, forKey: key)
+    }
+
+    @objc private func openSettings() {
+        if settingsController == nil {
+            settingsController = SettingsWindowController()
+        }
+        settingsController?.showWindow(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     @objc private func openHelp() {

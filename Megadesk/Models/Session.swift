@@ -5,10 +5,12 @@ struct Session: Identifiable, Codable {
     let cwd: String
     let state: String
     let stateSince: Double
+    let createdAt: Double?
     let lastUpdated: Double
     let toolName: String
     let lastEvent: String
     let itermSessionId: String
+    let claudePid: Int32?
 
     var id: String { sessionId }
 
@@ -34,9 +36,9 @@ struct Session: Identifiable, Codable {
         return Date().timeIntervalSince1970 - lastUpdated > 4
     }
 
-    /// Session has been in "waiting" state for >5 minutes — effectively idle.
+    /// Session has been in "waiting" state for longer than the configured threshold — effectively idle.
     var isForgotten: Bool {
-        !isWorking && timeInState > 300
+        !isWorking && timeInState > TimeInterval(AppSettings.shared.forgottenMinutes * 60)
     }
 
     enum CodingKeys: String, CodingKey {
@@ -44,9 +46,11 @@ struct Session: Identifiable, Codable {
         case cwd
         case state
         case stateSince = "state_since"
+        case createdAt = "created_at"
         case lastUpdated = "last_updated"
         case toolName = "tool_name"
         case lastEvent = "last_event"
         case itermSessionId = "iterm_session_id"
+        case claudePid = "claude_pid"
     }
 }

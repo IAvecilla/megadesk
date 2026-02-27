@@ -1,6 +1,7 @@
 import Foundation
 import AppKit
 import Observation
+import Darwin
 
 @Observable
 final class StatusStore {
@@ -27,6 +28,10 @@ final class StatusStore {
     private var cycleSessionObserver: Any?
     private var flashTimer: Timer?
     private var lastCycleIndex: Int? = nil
+    private let startupTime = Date()
+
+    // kqueue-based process watchers: itermSessionId → DispatchSourceProcess
+    private var processSources: [String: DispatchSourceProcess] = [:]
 
     init() {
         loadCustomNames()
@@ -60,6 +65,7 @@ final class StatusStore {
         if let obs = focusSessionObserver { NotificationCenter.default.removeObserver(obs) }
         if let obs = cycleSessionObserver  { NotificationCenter.default.removeObserver(obs) }
         flashTimer?.invalidate()
+        processSources.values.forEach { $0.cancel() }
     }
 
     @discardableResult
@@ -159,13 +165,27 @@ final class StatusStore {
         }
         let deduped = Array(seen.values)
 
-        // Sort by urgency: needs confirmation → waiting → working → forgotten
-        sessions = deduped.sorted {
-            let p0 = urgencyPriority($0)
-            let p1 = urgencyPriority($1)
-            if p0 != p1 { return p0 < p1 }
-            if p0 == 3 { return $0.timeInState < $1.timeInState }
-            return $0.projectName < $1.projectName
+        sessions = sorted(deduped)
+        updateProcessWatchers()
+    }
+
+    func sorted(_ list: [Session]) -> [Session] {
+        switch AppSettings.shared.sortOrder {
+        case .byState:
+            return list.sorted {
+                let p0 = urgencyPriority($0), p1 = urgencyPriority($1)
+                if p0 != p1 { return p0 < p1 }
+                if p0 == 3 { return $0.timeInState < $1.timeInState }
+                return $0.projectName < $1.projectName
+            }
+        case .byActivity:
+            return list.sorted { $0.lastUpdated > $1.lastUpdated }
+        case .byName:
+            return list.sorted { $0.projectName < $1.projectName }
+        case .byCreation:
+            return list.sorted {
+                ($0.createdAt ?? $0.stateSince) < ($1.createdAt ?? $1.stateSince)
+            }
         }
     }
 
@@ -230,9 +250,50 @@ final class StatusStore {
         }
     }
 
+    /// Registers kqueue watchers for any new sessions that have a claudePid,
+    /// and cancels watchers for sessions that are no longer in the list.
+    /// When a watched process exits, the card is removed instantly via kqueue notification.
+    private func updateProcessWatchers() {
+        let activeIds = Set(sessions.compactMap { $0.claudePid != nil ? $0.itermSessionId : nil })
+
+        // Cancel watchers for sessions no longer loaded
+        for id in Set(processSources.keys).subtracting(activeIds) {
+            processSources[id]?.cancel()
+            processSources.removeValue(forKey: id)
+        }
+
+        // Register watchers for new sessions
+        for session in sessions {
+            guard let pid = session.claudePid,
+                  processSources[session.itermSessionId] == nil else { continue }
+
+            // If already dead, remove immediately
+            guard kill(pid_t(pid), 0) == 0 || errno == EPERM else {
+                removeSessionFiles(withItermId: session.itermSessionId)
+                continue
+            }
+
+            let itermId = session.itermSessionId
+            let source = DispatchSource.makeProcessSource(
+                identifier: pid_t(pid),
+                eventMask: .exit,
+                queue: .main
+            )
+            source.setEventHandler { [weak self] in
+                self?.processSources.removeValue(forKey: itermId)
+                self?.removeSessionFiles(withItermId: itermId)
+            }
+            source.resume()
+            processSources[itermId] = source
+        }
+    }
+
     /// Queries iTerm2 for all active session IDs and removes session files whose
     /// iTerm2 tab no longer exists (e.g. the user closed the terminal tab).
     private func checkOrphanedSessions() {
+        // Skip for the first 30s after launch — iTerm2 may return an incomplete
+        // session list immediately after Megadesk restarts, causing false deletions.
+        guard Date().timeIntervalSince(startupTime) > 30 else { return }
         let script = """
         tell application "iTerm2"
             set ids to {}

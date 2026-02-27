@@ -25,21 +25,10 @@
 		AA000016 /* PRCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000018 /* PRCardView.swift */; };
 		AA000017 /* HelpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000019 /* HelpView.swift */; };
 		AA000018 /* HelpWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000020 /* HelpWindowController.swift */; };
+		AA000019 /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000021 /* AppSettings.swift */; };
+		AA000020 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000022 /* SettingsView.swift */; };
+		AA000021 /* SettingsWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000023 /* SettingsWindowController.swift */; };
 /* End PBXBuildFile section */
-
-/* Begin PBXShellScriptBuildPhase section */
-		AC000004 /* Inject Build Number */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = ();
-			inputPaths = ();
-			name = "Inject Build Number";
-			outputPaths = ();
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "BUILD=$(git -C \"$SRCROOT\" rev-list --count HEAD 2>/dev/null || echo 0)\n/usr/libexec/PlistBuddy -c \"Set :CFBundleVersion $BUILD\" \"${BUILT_PRODUCTS_DIR}/${INFOPLIST_PATH}\"\n";
-		};
-/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXFileReference section */
 		AB000001 /* MegadeskApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MegadeskApp.swift; sourceTree = "<group>"; };
@@ -62,6 +51,9 @@
 		AB000018 /* PRCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PRCardView.swift; sourceTree = "<group>"; };
 		AB000019 /* HelpView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelpView.swift; sourceTree = "<group>"; };
 		AB000020 /* HelpWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelpWindowController.swift; sourceTree = "<group>"; };
+		AB000021 /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
+		AB000022 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		AB000023 /* SettingsWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsWindowController.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -93,6 +85,9 @@
 				AB000016 /* OnboardingWindowController.swift */,
 				AB000019 /* HelpView.swift */,
 				AB000020 /* HelpWindowController.swift */,
+				AB000021 /* AppSettings.swift */,
+				AB000022 /* SettingsView.swift */,
+				AB000023 /* SettingsWindowController.swift */,
 				AD000002 /* Models */,
 				AD000003 /* Services */,
 				AB000009 /* Info.plist */,
@@ -199,6 +194,23 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		AC000004 /* Inject Build Number */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Inject Build Number";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "BUILD=$(git -C \"$SRCROOT\" rev-list --count HEAD 2>/dev/null || echo 0)\n/usr/libexec/PlistBuddy -c \"Set :CFBundleVersion $BUILD\" \"${BUILT_PRODUCTS_DIR}/${INFOPLIST_PATH}\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		AC000002 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -220,6 +232,9 @@
 				AA000016 /* PRCardView.swift in Sources */,
 				AA000017 /* HelpView.swift in Sources */,
 				AA000018 /* HelpWindowController.swift in Sources */,
+				AA000019 /* AppSettings.swift in Sources */,
+				AA000020 /* SettingsView.swift in Sources */,
+				AA000021 /* SettingsWindowController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -350,7 +365,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 5;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = H3ZJZ84RLJ;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Megadesk/Info.plist;
@@ -358,12 +373,12 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.4.5;
-				PRODUCT_BUNDLE_IDENTIFIER = com.megadesk.v2;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.5.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.megadesk;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
 			};
 			name = Debug;
 		};
@@ -376,7 +391,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 5;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = H3ZJZ84RLJ;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Megadesk/Info.plist;
@@ -384,12 +399,12 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.4.5;
-				PRODUCT_BUNDLE_IDENTIFIER = com.megadesk.v2;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.5.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.megadesk;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
 			};
 			name = Release;
 		};
@@ -415,7 +430,6 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
-
 	};
 	rootObject = AE000002 /* Project object */;
 }

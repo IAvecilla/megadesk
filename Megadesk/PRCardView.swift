@@ -126,12 +126,16 @@ struct PRCardView: View {
                             }
                         }
 
-                    HStack(spacing: 3) {
-                        if pr.hasConflicts { badge("conflict", color: .red) }
-                        if pr.isBehindMain { badge("behind", color: .yellow) }
-                    }
+                    ZStack(alignment: .trailing) {
+                        HStack(spacing: 3) {
+                            if pr.hasConflicts { badge("conflict", color: .red) }
+                            if pr.isBehindMain { badge("behind", color: .yellow) }
+                        }
+                        .opacity(isHovered ? 0 : 1)
+                        .animation(.easeInOut(duration: 0.15), value: isHovered)
 
-                    deleteButton
+                        deleteButton
+                    }
                 }
             }
             .padding(.horizontal, 12)
@@ -203,22 +207,22 @@ struct PRCardView: View {
     }
 
     private func dotColor(_ pr: PullRequest) -> Color {
-        if pr.isMerged { return .cyan }
-        if pr.isClosed { return Color(white: 0.45) }
+        if pr.isMerged { return AppSettings.shared.colorPRMerged }
+        if pr.isClosed { return AppSettings.shared.colorPRClosed }
         switch pr.ciStatus {
-        case .failing: return .red
-        case .pending: return .orange
-        case .passing: return .green
-        case .none:    return Color(white: 0.45)
+        case .failing: return AppSettings.shared.colorPRFailing
+        case .pending: return AppSettings.shared.colorPRPending
+        case .passing: return AppSettings.shared.colorPRPassing
+        case .none:    return AppSettings.shared.colorPRClosed
         }
     }
 
     private func loadedBackground(_ pr: PullRequest) -> Color {
-        if pr.isMerged { return Color.cyan.opacity(isHovered ? 0.12 : 0.06) }
+        if pr.isMerged { return AppSettings.shared.colorPRMerged.opacity(isHovered ? 0.12 : 0.06) }
         if pr.isClosed { return Color.white.opacity(isHovered ? 0.07 : 0.02) }
         switch pr.ciStatus {
-        case .failing: return Color.red.opacity(isHovered ? 0.16 : 0.08)
-        case .pending: return Color.orange.opacity(isHovered ? 0.16 : 0.08)
+        case .failing: return AppSettings.shared.colorPRFailing.opacity(isHovered ? 0.16 : 0.08)
+        case .pending: return AppSettings.shared.colorPRPending.opacity(isHovered ? 0.16 : 0.08)
         default:       return Color.white.opacity(isHovered ? 0.12 : 0.05)
         }
     }
@@ -251,15 +255,15 @@ struct CompactPRCardView: View {
 
     private var dotColor: Color {
         guard trackedPR.fetchState == .loaded, let pr = trackedPR.data else {
-            return Color(white: 0.45)
+            return AppSettings.shared.colorPRClosed
         }
-        if pr.isMerged { return .cyan }
-        if pr.isClosed { return Color(white: 0.45) }
+        if pr.isMerged { return AppSettings.shared.colorPRMerged }
+        if pr.isClosed { return AppSettings.shared.colorPRClosed }
         switch pr.ciStatus {
-        case .failing: return .red
-        case .pending: return .orange
-        case .passing: return .green
-        case .none:    return Color(white: 0.45)
+        case .failing: return AppSettings.shared.colorPRFailing
+        case .pending: return AppSettings.shared.colorPRPending
+        case .passing: return AppSettings.shared.colorPRPassing
+        case .none:    return AppSettings.shared.colorPRClosed
         }
     }
 
@@ -267,11 +271,11 @@ struct CompactPRCardView: View {
         guard let pr = trackedPR.data else {
             return Color.white.opacity(isHovered ? 0.10 : 0.04)
         }
-        if pr.isMerged { return Color.cyan.opacity(isHovered ? 0.12 : 0.06) }
+        if pr.isMerged { return AppSettings.shared.colorPRMerged.opacity(isHovered ? 0.12 : 0.06) }
         if pr.isClosed { return Color.white.opacity(isHovered ? 0.07 : 0.02) }
         switch pr.ciStatus {
-        case .failing: return Color.red.opacity(isHovered ? 0.16 : 0.08)
-        case .pending: return Color.orange.opacity(isHovered ? 0.16 : 0.08)
+        case .failing: return AppSettings.shared.colorPRFailing.opacity(isHovered ? 0.16 : 0.08)
+        case .pending: return AppSettings.shared.colorPRPending.opacity(isHovered ? 0.16 : 0.08)
         default:       return Color.white.opacity(isHovered ? 0.12 : 0.05)
         }
     }

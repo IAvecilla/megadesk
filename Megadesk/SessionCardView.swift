@@ -283,10 +283,10 @@ struct SessionCardView: View {
 
     private var dotColor: Color {
         if isDying                   { return .red }
-        if session.needsConfirmation { return .cyan }
-        if session.isWorking         { return .green }
-        if session.isForgotten       { return Color(white: 0.45) }
-        return .orange
+        if session.needsConfirmation { return AppSettings.shared.colorConfirmation }
+        if session.isWorking         { return AppSettings.shared.colorWorking }
+        if session.isForgotten       { return AppSettings.shared.colorForgotten }
+        return AppSettings.shared.colorWaiting
     }
 
     private var shouldPulse: Bool { session.isWorking && !isDying }
@@ -301,16 +301,16 @@ struct SessionCardView: View {
 
     private var labelColor: Color {
         if isDying                   { return .red.opacity(0.8) }
-        if session.needsConfirmation { return .cyan.opacity(0.9) }
-        if session.isWorking         { return .green.opacity(0.8) }
+        if session.needsConfirmation { return AppSettings.shared.colorConfirmation.opacity(0.9) }
+        if session.isWorking         { return AppSettings.shared.colorWorking.opacity(0.8) }
         if session.isForgotten       { return isFlashing ? Color(white: 0.7) : Color(white: 0.4) }
-        return .orange.opacity(0.9)
+        return AppSettings.shared.colorWaiting.opacity(0.9)
     }
 
     private var cardBackground: Color {
         if isDying                                     { return Color.red.opacity(isHovered ? 0.12 : 0.06) }
-        if session.needsConfirmation                   { return Color.cyan.opacity(isHovered ? 0.16 : 0.08) }
-        if !session.isWorking && !session.isForgotten  { return Color.orange.opacity(isHovered ? 0.16 : 0.08) }
+        if session.needsConfirmation                   { return AppSettings.shared.colorConfirmation.opacity(isHovered ? 0.16 : 0.08) }
+        if !session.isWorking && !session.isForgotten  { return AppSettings.shared.colorWaiting.opacity(isHovered ? 0.16 : 0.08) }
         if session.isForgotten                         { return Color.white.opacity(isHovered ? 0.07 : 0.02) }
         return Color.white.opacity(isHovered ? 0.12 : 0.05)
     }
