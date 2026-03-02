@@ -255,9 +255,13 @@ final class StatusStore {
         }
     }
 
+    /// Whether any sessions are real iTerm2 sessions (not fallback IDs).
+    private var hasItermSessions: Bool {
+        sessions.contains { $0.terminal == .iterm2 && $0.itermSessionId != $0.sessionId }
+    }
+
     private func syncActiveSession() {
         // Only sync with iTerm2 — Ghostty doesn't expose per-tab session IDs yet
-        let hasItermSessions = sessions.contains { $0.terminal == .iterm2 && $0.itermSessionId != $0.sessionId }
         guard hasItermSessions else { return }
 
         detectCurrentItermSession { [weak self] currentId in
@@ -320,7 +324,6 @@ final class StatusStore {
         guard Date().timeIntervalSince(startupTime) > 30 else { return }
 
         // Only check iTerm2 orphans if there are iTerm2 sessions to check
-        let hasItermSessions = sessions.contains { $0.terminal == .iterm2 && $0.itermSessionId != $0.sessionId }
         guard hasItermSessions else { return }
 
         let script = """

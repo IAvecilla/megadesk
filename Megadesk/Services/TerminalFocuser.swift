@@ -86,14 +86,9 @@ struct TerminalFocuser {
     // When Ghostty adds GHOSTTY_SESSION_ID or native AppleScript tab focusing,
     // this workaround can be replaced with a direct lookup like iTerm2 uses.
 
-    /// Info about a single Ghostty tab, including directories from all panes.
-    private struct GhosttyTabInfo {
-        let directories: Set<String>
-    }
-
-    /// Cached mapping of tab index (1-based) → tab info with all pane directories.
+    /// Cached mapping of tab index (1-based) → set of directory names from all panes.
     /// Invalidated when the tab count changes.
-    private static var ghosttyTabMap: [Int: GhosttyTabInfo] = [:]
+    private static var ghosttyTabMap: [Int: Set<String>] = [:]
     private static var ghosttyTabCount: Int = 0
 
     /// Tracks which tab index each TTY was assigned to for same-directory disambiguation.
@@ -108,23 +103,24 @@ struct TerminalFocuser {
     static func focusGhostty(cwd: String, tty: String) -> Bool {
         let projectName = URL(fileURLWithPath: cwd).lastPathComponent
 
+        func matchingTabs() -> [Int] {
+            ghosttyTabMap.filter { $0.value.contains(projectName) }.map(\.key).sorted()
+        }
+
         // Check if cache is still valid by comparing tab count
         let currentTabCount = getGhosttyTabCount()
         if currentTabCount != ghosttyTabCount || ghosttyTabMap.isEmpty {
             rebuildGhosttyTabMap()
         }
 
-        // Find all tabs matching this directory (check all pane directories per tab)
-        let matches = ghosttyTabMap.filter { $0.value.directories.contains(projectName) }.map(\.key).sorted()
-
+        var matches = matchingTabs()
         if matches.isEmpty {
             // Cache might be stale — force rebuild and retry once
             rebuildGhosttyTabMap()
-            let retryMatches = ghosttyTabMap.filter { $0.value.directories.contains(projectName) }.map(\.key).sorted()
-            if retryMatches.isEmpty { return false }
-            return selectGhosttyTab(matches: retryMatches, tty: tty)
+            matches = matchingTabs()
         }
 
+        guard !matches.isEmpty else { return false }
         return selectGhosttyTab(matches: matches, tty: tty)
     }
 
@@ -267,12 +263,12 @@ struct TerminalFocuser {
             return
         }
 
-        var newMap: [Int: GhosttyTabInfo] = [:]
+        var newMap: [Int: Set<String>] = [:]
         for entry in str.split(separator: ",") {
             let parts = entry.split(separator: ":", maxSplits: 1)
             if parts.count == 2, let idx = Int(parts[0]) {
                 let dirs = String(parts[1]).split(separator: "|").map(String.init)
-                newMap[idx] = GhosttyTabInfo(directories: Set(dirs))
+                newMap[idx] = Set(dirs)
             }
         }
 
