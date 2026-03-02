@@ -5,8 +5,8 @@ struct OnboardingView: View {
     var onFinish: () -> Void
 
     @State private var hookDone = HookInstaller.isInstalled()
-    @State private var itermDone = false
-    @State private var itermDenied = false
+    @State private var terminalDone = false
+    @State private var terminalDenied = false
 
     var body: some View {
         VStack(spacing: 20) {
@@ -42,27 +42,35 @@ struct OnboardingView: View {
                 }
             }
 
-            // Step 2: iTerm2 AppleScript permission
+            // Step 2: Terminal AppleScript permission
             StepCard(
                 number: 2,
-                title: "Allow iTerm2 Control",
-                description: "Uses AppleScript to focus the right tab when you click a session card.",
+                title: "Allow Terminal Control",
+                description: "Uses AppleScript to focus the right tab when you click a session card. Works with iTerm2 and Ghostty.",
                 buttonLabel: "Grant Access",
-                isDone: itermDone,
+                isDone: terminalDone,
                 isDisabled: !hookDone
             ) {
+                // Try iTerm2 first, then Ghostty — succeed if either works
                 var errorDict: NSDictionary?
                 NSAppleScript(source: "tell application \"iTerm2\" to get name")?
                     .executeAndReturnError(&errorDict)
-                if errorDict == nil {
-                    itermDone = true
-                    itermDenied = false
+                let itermOk = errorDict == nil
+
+                var ghosttyError: NSDictionary?
+                NSAppleScript(source: "tell application \"Ghostty\" to get name")?
+                    .executeAndReturnError(&ghosttyError)
+                let ghosttyOk = ghosttyError == nil
+
+                if itermOk || ghosttyOk {
+                    terminalDone = true
+                    terminalDenied = false
                 } else {
-                    itermDenied = true
+                    terminalDenied = true
                 }
             }
 
-            if itermDenied {
+            if terminalDenied {
                 Text("Focus won't work until you grant access in System Settings → Privacy → Automation")
                     .font(.caption)
                     .foregroundColor(.secondary)

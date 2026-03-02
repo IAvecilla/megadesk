@@ -70,20 +70,29 @@ final class StatusStore {
 
     @discardableResult
     func focusTerminal(session: Session) -> Bool {
-        // Fallback sessions (itermSessionId == sessionId) have no associated iTerm2 tab —
-        // $ITERM_SESSION_ID wasn't available (e.g. tmux without the env var, or non-iTerm2
-        // terminal). We can't focus them but they're not "not found" either.
-        guard session.itermSessionId != session.sessionId else {
+        // Ghostty and other known terminals can still be activated even without a
+        // per-tab session ID. Only skip focus for truly unknown terminals that fell
+        // back to using the Claude session ID as the terminal ID.
+        if session.itermSessionId == session.sessionId && session.terminal == .unknown {
             activeSessionId = session.sessionId
             return true
         }
 
-        let found = TerminalFocuser.focusiTerm2(sessionId: session.itermSessionId)
+        let found = TerminalFocuser.focus(session: session)
 
         // For tmux sessions the stored iterm_session_id is "{UUID}:{tmux_pane}".
         // If focus fails it means the *original* iTerm2 tab was closed (e.g. after
         // detach/reattach), but Claude is still running inside tmux — don't delete the card.
-        if !found && session.itermSessionId.contains(":") {
+        if !found && session.terminal == .iterm2 && session.itermSessionId.contains(":") {
+            activeSessionId = session.sessionId
+            return true
+        }
+
+        // Ghostty doesn't expose per-pane IDs, so split panes within the same tab
+        // can't always be individually focused. Activate the app as a fallback and
+        // keep the card alive — the session is still running.
+        if !found && session.terminal == .ghostty {
+            NSWorkspace.shared.launchApplication("Ghostty")
             activeSessionId = session.sessionId
             return true
         }
@@ -176,15 +185,25 @@ final class StatusStore {
                 let p0 = urgencyPriority($0), p1 = urgencyPriority($1)
                 if p0 != p1 { return p0 < p1 }
                 if p0 == 3 { return $0.timeInState < $1.timeInState }
-                return $0.projectName < $1.projectName
+                if $0.projectName != $1.projectName { return $0.projectName < $1.projectName }
+                return $0.sessionId < $1.sessionId
             }
         case .byActivity:
-            return list.sorted { $0.lastUpdated > $1.lastUpdated }
+            return list.sorted {
+                if $0.lastUpdated != $1.lastUpdated { return $0.lastUpdated > $1.lastUpdated }
+                return $0.sessionId < $1.sessionId
+            }
         case .byName:
-            return list.sorted { $0.projectName < $1.projectName }
+            return list.sorted {
+                if $0.projectName != $1.projectName { return $0.projectName < $1.projectName }
+                return $0.sessionId < $1.sessionId
+            }
         case .byCreation:
             return list.sorted {
-                ($0.createdAt ?? $0.stateSince) < ($1.createdAt ?? $1.stateSince)
+                let t0 = $0.createdAt ?? $0.stateSince
+                let t1 = $1.createdAt ?? $1.stateSince
+                if t0 != t1 { return t0 < t1 }
+                return $0.sessionId < $1.sessionId
             }
         }
     }
@@ -237,6 +256,10 @@ final class StatusStore {
     }
 
     private func syncActiveSession() {
+        // Only sync with iTerm2 — Ghostty doesn't expose per-tab session IDs yet
+        let hasItermSessions = sessions.contains { $0.terminal == .iterm2 && $0.itermSessionId != $0.sessionId }
+        guard hasItermSessions else { return }
+
         detectCurrentItermSession { [weak self] currentId in
             DispatchQueue.main.async {
                 guard let self, let currentId else { return }
@@ -290,10 +313,16 @@ final class StatusStore {
 
     /// Queries iTerm2 for all active session IDs and removes session files whose
     /// iTerm2 tab no longer exists (e.g. the user closed the terminal tab).
+    /// Non-iTerm2 sessions (Ghostty, unknown) rely on process watchers for cleanup.
     private func checkOrphanedSessions() {
         // Skip for the first 30s after launch — iTerm2 may return an incomplete
         // session list immediately after Megadesk restarts, causing false deletions.
         guard Date().timeIntervalSince(startupTime) > 30 else { return }
+
+        // Only check iTerm2 orphans if there are iTerm2 sessions to check
+        let hasItermSessions = sessions.contains { $0.terminal == .iterm2 && $0.itermSessionId != $0.sessionId }
+        guard hasItermSessions else { return }
+
         let script = """
         tell application "iTerm2"
             set ids to {}
@@ -330,12 +359,14 @@ final class StatusStore {
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
                 // Collect iTerm session IDs that are no longer present in iTerm2.
+                // Only check iTerm2 sessions — Ghostty/unknown sessions use process watchers.
                 // Skip fallback sessions (itermSessionId == sessionId) — those aren't iTerm2 sessions.
                 // Also skip recently-updated sessions: inside tmux $ITERM_SESSION_ID can be stale
                 // (e.g. after detach/reattach), but Claude is still actively writing hook events.
                 let staleThreshold = Date().timeIntervalSince1970 - 120
                 let orphanedItermIds = self.sessions
                     .filter { s in
+                        guard s.terminal == .iterm2 else { return false }
                         // Strip tmux pane suffix (format: "{iterm_uuid}:{tmux_pane}") before
                         // comparing against iTerm2 active IDs, which only know the bare UUID.
                         let bareId = s.itermSessionId.components(separatedBy: ":").first ?? s.itermSessionId

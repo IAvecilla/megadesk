@@ -1,5 +1,11 @@
 import Foundation
 
+enum TerminalType: String, Codable {
+    case iterm2 = "iterm2"
+    case ghostty = "ghostty"
+    case unknown = "unknown"
+}
+
 struct Session: Identifiable, Codable {
     let sessionId: String
     let cwd: String
@@ -10,6 +16,8 @@ struct Session: Identifiable, Codable {
     let toolName: String
     let lastEvent: String
     let itermSessionId: String
+    let terminal: TerminalType
+    let tty: String
     let claudePid: Int32?
 
     var id: String { sessionId }
@@ -51,6 +59,24 @@ struct Session: Identifiable, Codable {
         case toolName = "tool_name"
         case lastEvent = "last_event"
         case itermSessionId = "iterm_session_id"
+        case terminal
+        case tty
         case claudePid = "claude_pid"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        sessionId = try c.decode(String.self, forKey: .sessionId)
+        cwd = try c.decode(String.self, forKey: .cwd)
+        state = try c.decode(String.self, forKey: .state)
+        stateSince = try c.decode(Double.self, forKey: .stateSince)
+        createdAt = try c.decodeIfPresent(Double.self, forKey: .createdAt)
+        lastUpdated = try c.decode(Double.self, forKey: .lastUpdated)
+        toolName = try c.decode(String.self, forKey: .toolName)
+        lastEvent = try c.decode(String.self, forKey: .lastEvent)
+        itermSessionId = try c.decode(String.self, forKey: .itermSessionId)
+        terminal = try c.decodeIfPresent(TerminalType.self, forKey: .terminal) ?? .iterm2
+        tty = try c.decodeIfPresent(String.self, forKey: .tty) ?? ""
+        claudePid = try c.decodeIfPresent(Int32.self, forKey: .claudePid)
     }
 }

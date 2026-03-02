@@ -4,7 +4,7 @@
 
 # Megadesk
 
-**Claude Code session monitor for iTerm2.**
+**Claude Code session monitor for iTerm2 and Ghostty.**
 
 <p align="center">
   <a href="https://github.com/saugon/megadesk/releases/latest/download/Megadesk.dmg">
@@ -12,7 +12,7 @@
   </a>
 </p>
 
-Megadesk is a macOS menu-bar widget that shows all your active Claude Code sessions at a glance. Each session card displays its current state, how long it's been in that state, and lets you jump directly to the right iTerm2 tab with a single click.
+Megadesk is a macOS menu-bar widget that shows all your active Claude Code sessions at a glance. Each session card displays its current state, how long it's been in that state, and lets you jump directly to the right terminal tab with a single click. Supports iTerm2 and Ghostty with per-tab focus.
 
 ---
 
@@ -27,7 +27,7 @@ Megadesk is a macOS menu-bar widget that shows all your active Claude Code sessi
 ## Requirements
 
 - macOS 14 or later
-- [iTerm2](https://iterm2.com)
+- [iTerm2](https://iterm2.com) or [Ghostty](https://ghostty.org)
 - [Claude Code](https://claude.ai/code) (the `claude` CLI)
 - [gh CLI](https://cli.github.com) — only needed for PR tracking
 
@@ -40,8 +40,8 @@ On first launch, Megadesk runs a two-step onboarding:
 **Step 1 — Install Hook**
 Clicks "Install Hook" to add a Python hook to `~/.claude/settings.json`. This hook notifies Megadesk whenever a Claude Code session changes state (tool use, stop, prompt submit, etc.).
 
-**Step 2 — Allow iTerm2 Control**
-Clicks "Grant Access" to authorize AppleScript control of iTerm2. This is what lets Megadesk focus the right tab when you click a session card. If you skip this step (or deny it in System Settings), the widget still shows session states but clicking cards won't switch tabs.
+**Step 2 — Allow Terminal Control**
+Clicks "Grant Access" to authorize AppleScript control of your terminal (iTerm2 and/or Ghostty). This is what lets Megadesk focus the right tab when you click a session card. If you skip this step (or deny it in System Settings), the widget still shows session states but clicking cards won't switch tabs.
 
 After both steps, click **Continue**. The widget appears and stays visible until you hide it with `⌘⇧M`.
 
@@ -66,7 +66,7 @@ The time displayed on the right shows how long the session has been in its curre
 
 ### Interacting with sessions
 
-**Click a card** — focuses the corresponding iTerm2 tab immediately.
+**Click a card** — focuses the corresponding terminal tab. For iTerm2, Megadesk switches directly to the exact tab via AppleScript. For Ghostty, Megadesk uses the macOS Accessibility API to identify and switch to the correct tab.
 
 **Rename a session** — hover over a card and click the pencil icon (✏) that appears. Type a name and press Enter to confirm, Escape to cancel. Custom names persist even when you `cd` into a different directory in that tab. To revert to the auto-detected name, click the ↩ button that appears while editing.
 
@@ -143,6 +143,8 @@ Click the Megadesk icon in the menu bar to access:
 ## Known Issues
 
 - **Session state may not always update correctly.** Megadesk relies entirely on Claude Code hooks to detect state changes. If a session is interrupted (e.g. you cancel a running task with `Ctrl+C`), the hook may not fire and the card can remain stuck on "working" until the next event arrives. This is a limitation of the hook-based approach rather than something Megadesk can work around on its own.
+
+- **Ghostty tab focus is approximate.** Ghostty does not yet expose per-tab session IDs or an AppleScript dictionary for focusing specific tabs ([tracking discussion](https://github.com/ghostty-org/ghostty/discussions/10603)). Megadesk works around this by matching tabs to sessions via the macOS Accessibility API and the tab's working directory. The first click after launching Megadesk (or after opening/closing tabs) briefly cycles through tabs to build a mapping; subsequent clicks are instant. If multiple sessions share the same directory, Megadesk assigns each to a different tab, but the assignment may not always be correct. **Split panes within a tab are supported** — during the tab scan, Megadesk cycles through panes using `Cmd+]` (`goto_split:next`) to read each pane's directory, so clicking a session card focuses the correct tab even if the session is in a non-focused pane. However, pane-level focus within a tab is not possible (Ghostty doesn't expose per-pane identifiers). This pane-cycling depends on the default `Cmd+]` keybinding; if remapped, Megadesk falls back to single-directory-per-tab behavior. These limitations will be resolved when Ghostty adds native tab/pane identification.
 
 ---
 

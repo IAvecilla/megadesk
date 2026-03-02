@@ -15,7 +15,7 @@ struct HelpView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Megadesk")
                         .font(.title2).fontWeight(.semibold)
-                    Text("Claude Code session monitor for iTerm2")
+                    Text("Claude Code session monitor")
                         .font(.subheadline).foregroundColor(.secondary)
                 }
             }
@@ -51,7 +51,7 @@ struct HelpView: View {
             // Features
             GroupBox("Features") {
                 VStack(alignment: .leading, spacing: 8) {
-                    FeatureRow(icon: "cursorarrow.click",           text: "Click a card to focus its iTerm2 tab")
+                    FeatureRow(icon: "cursorarrow.click",           text: "Click a card to focus its terminal tab (iTerm2, Ghostty)")
                     FeatureRow(icon: "pencil",                      text: "Click ✏ on a card to rename it — persists through cd changes")
                     FeatureRow(icon: "rectangle.compress.vertical", text: "Compact Mode: condensed single-column view")
                     FeatureRow(icon: "arrow.triangle.pull",         text: "PR Tracking: paste a PR URL (e.g. github.com/org/repo/pull/123) to monitor its status via the gh CLI")

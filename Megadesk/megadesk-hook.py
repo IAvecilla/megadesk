@@ -34,6 +34,21 @@ def _find_claude_pid() -> int:
     return os.getppid()  # fallback
 
 
+def _find_tty(pid: int) -> str:
+    """Get the TTY device name for a process (e.g. 'ttys022')."""
+    import subprocess
+    try:
+        tty = subprocess.check_output(
+            ["ps", "-p", str(pid), "-o", "tty="],
+            stderr=subprocess.DEVNULL, text=True,
+        ).strip()
+        if tty and tty != "??":
+            return tty
+    except Exception:
+        pass
+    return ""
+
+
 # Mapping of hook events to states
 EVENT_STATE_MAP = {
     "PreToolUse": "working",
@@ -77,6 +92,9 @@ def main():
 
     cwd = data.get("cwd", os.getcwd())
     tool_name = data.get("tool_name") or data.get("tool", "") or ""
+    # Detect which terminal emulator is running
+    term_program = os.environ.get("TERM_PROGRAM", "").lower()
+
     # ITERM_SESSION_ID is "w0t0p0:UUID" — iTerm2 AppleScript unique id is only the UUID part
     iterm_raw = os.environ.get("ITERM_SESSION_ID", "")
     iterm_session_id = iterm_raw.split(":", 1)[-1] if ":" in iterm_raw else iterm_raw
@@ -89,6 +107,17 @@ def main():
     # doesn't collapse all sessions onto the same empty-string key.
     if not iterm_session_id:
         iterm_session_id = session_id
+
+    # Determine terminal type for the Swift app.
+    # Ghostty doesn't yet provide a per-tab session ID (like iTerm2's $ITERM_SESSION_ID),
+    # so the app uses an Accessibility-based workaround to focus the correct tab.
+    # See: https://github.com/ghostty-org/ghostty/discussions/10603
+    if iterm_raw:
+        terminal = "iterm2"
+    elif term_program == "ghostty":
+        terminal = "ghostty"
+    else:
+        terminal = "unknown"
 
     session_file = SESSIONS_DIR / f"{session_id}.json"
     SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
@@ -107,6 +136,7 @@ def main():
         except (json.JSONDecodeError, OSError):
             pass
 
+    claude_pid = _find_claude_pid()
     session_data = {
         "session_id": session_id,
         "cwd": cwd,
@@ -117,7 +147,9 @@ def main():
         "tool_name": tool_name,
         "last_event": hook_event,
         "iterm_session_id": iterm_session_id,
-        "claude_pid": _find_claude_pid(),
+        "terminal": terminal,
+        "tty": _find_tty(claude_pid),
+        "claude_pid": claude_pid,
     }
 
     # On SessionStart, remove stale files from the same iTerm tab

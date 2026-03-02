@@ -25,7 +25,7 @@
 	<key>MegadeskBuildDate</key>
 	<string>$(MARKETING_VERSION)</string>
 	<key>NSAppleEventsUsageDescription</key>
-	<string>Megadesk needs to control iTerm2 to focus terminal sessions.</string>
+	<string>Megadesk needs to control your terminal (iTerm2, Ghostty) to focus sessions.</string>
 	<key>NSAppleScriptEnabled</key>
 	<true/>
 	<key>NSPrincipalClass</key>
