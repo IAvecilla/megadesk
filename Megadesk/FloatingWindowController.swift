@@ -232,21 +232,13 @@ final class FloatingWindowController: NSWindowController {
         titlebarView.addSubview(label)
         titleLabel = label
 
-        // Reset-to-auto-height button — right side of title bar, visible only when height is locked
-        let resetBtn = NSButton()
-        resetBtn.isBordered = false
-        let symConfig = NSImage.SymbolConfiguration(pointSize: 10, weight: .regular)
-        resetBtn.image = NSImage(systemSymbolName: "arrow.up.and.down.circle",
-                                 accessibilityDescription: "Reset to auto height")?
-            .withSymbolConfiguration(symConfig)
-        resetBtn.contentTintColor = NSColor.white.withAlphaComponent(0.6)
-        let btnSize: CGFloat = 16
-        resetBtn.frame = NSRect(
-            x: titlebarView.bounds.width - btnSize - 8,
-            y: sysClose.frame.midY - btnSize / 2,
-            width: btnSize, height: btnSize
+        // Green reset button — traffic-light position to the right of the red close button
+        let resetFrame = NSRect(
+            x: sysClose.frame.midX - size / 2 + 20,
+            y: sysClose.frame.midY - size / 2,
+            width: size, height: size
         )
-        resetBtn.autoresizingMask = [.minXMargin]   // stays right-anchored when window resizes
+        let resetBtn = TitlebarResetButton(frame: resetFrame)
         resetBtn.target = self
         resetBtn.action = #selector(resetToAutoHeightAction)
         resetBtn.isHidden = (userSetHeight == nil)
@@ -467,6 +459,73 @@ final class FloatingWindowController: NSWindowController {
 }
 
 // MARK: - TitlebarCloseButton
+
+/// An NSButton that draws as a green circle (reset to auto-height), with a ↕ icon on hover.
+private final class TitlebarResetButton: NSButton {
+
+    private var trackingArea: NSTrackingArea?
+    private var isHovered = false {
+        didSet { needsDisplay = true }
+    }
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        isBordered = false
+        bezelStyle = .circular
+        title = ""
+        wantsLayer = true
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let old = trackingArea { removeTrackingArea(old) }
+        let area = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeAlways],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+        trackingArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) { isHovered = true }
+    override func mouseExited(with event: NSEvent)  { isHovered = false }
+
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor(red: 0.20, green: 0.78, blue: 0.35, alpha: 1).setFill()
+        NSBezierPath(ovalIn: bounds).fill()
+
+        if isHovered {
+            // Draw a ↕ symbol: two small arrow heads pointing up and down
+            NSColor.black.withAlphaComponent(0.55).setStroke()
+            NSColor.black.withAlphaComponent(0.55).setFill()
+            let cx = bounds.midX
+            let cy = bounds.midY
+            let aw: CGFloat = bounds.width * 0.30  // arrow half-width
+            let ah: CGFloat = bounds.height * 0.22  // arrow head height
+            let gap: CGFloat = bounds.height * 0.06 // gap from center
+
+            // Up arrow
+            let upTip = NSPoint(x: cx, y: cy + gap + ah + ah * 0.5)
+            let upLeft = NSPoint(x: cx - aw, y: cy + gap + ah * 0.5)
+            let upRight = NSPoint(x: cx + aw, y: cy + gap + ah * 0.5)
+            let upPath = NSBezierPath()
+            upPath.move(to: upTip); upPath.line(to: upLeft); upPath.line(to: upRight)
+            upPath.close(); upPath.fill()
+
+            // Down arrow
+            let dnTip = NSPoint(x: cx, y: cy - gap - ah - ah * 0.5)
+            let dnLeft = NSPoint(x: cx - aw, y: cy - gap - ah * 0.5)
+            let dnRight = NSPoint(x: cx + aw, y: cy - gap - ah * 0.5)
+            let dnPath = NSBezierPath()
+            dnPath.move(to: dnTip); dnPath.line(to: dnLeft); dnPath.line(to: dnRight)
+            dnPath.close(); dnPath.fill()
+        }
+    }
+}
 
 /// An NSButton that always draws as a red circle, with an × on hover.
 private final class TitlebarCloseButton: NSButton {
