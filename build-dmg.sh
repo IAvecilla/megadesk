@@ -43,7 +43,7 @@ fi
 codesign --verify --deep --strict "$APP_PATH" || { echo "✗ Signature verification failed"; exit 1; }
 
 VERSION=$(defaults read "$APP_PATH/Contents/Info.plist" CFBundleShortVersionString)
-DMG_OUT="$SCRIPT_DIR/megadesk-$VERSION.dmg"
+DMG_OUT="$SCRIPT_DIR/Megadesk.dmg"
 
 echo "→ Creating DMG..."
 rm -f "$TMP_DMG" "$DMG_OUT"
@@ -112,12 +112,12 @@ echo "→ Stapling ticket..."
 xcrun stapler staple "$DMG_OUT"
 
 SIZE=$(du -sh "$DMG_OUT" | cut -f1)
-echo "✓ megadesk-$VERSION.dmg ($SIZE) — signed & notarized"
+echo "✓ Megadesk.dmg v$VERSION ($SIZE) — signed & notarized"
 
 if [ -n "$SPARKLE_BIN" ] && [ -x "$SPARKLE_BIN/sign_update" ]; then
   echo ""
   echo "→ Sparkle EdDSA signature (paste into docs/appcast.xml):"
-  "$SPARKLE_BIN/sign_update" "$DMG_OUT"
+  "$SPARKLE_BIN/sign_update" "$DMG_OUT" --version "$VERSION"
 else
   echo "⚠ Sparkle sign_update not found — sign manually with sign_update $DMG_OUT"
 fi
