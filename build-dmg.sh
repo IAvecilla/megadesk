@@ -117,7 +117,7 @@ echo "✓ Megadesk.dmg v$VERSION ($SIZE) — signed & notarized"
 if [ -n "$SPARKLE_BIN" ] && [ -x "$SPARKLE_BIN/sign_update" ]; then
   echo ""
   echo "→ Sparkle EdDSA signature (paste into docs/appcast.xml):"
-  "$SPARKLE_BIN/sign_update" "$DMG_OUT" --version "$VERSION"
+  "$SPARKLE_BIN/sign_update" "$DMG_OUT"
 else
   echo "⚠ Sparkle sign_update not found — sign manually with sign_update $DMG_OUT"
 fi
