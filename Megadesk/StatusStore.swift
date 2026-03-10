@@ -224,7 +224,9 @@ final class StatusStore {
             // The file watcher handles instant updates; this catches any missed events.
             self?.loadSessions()
             // Every 10 seconds, ask iTerm2 which tabs are still alive and remove orphaned cards.
+            // Also verify claudePid is still alive as a safety net for kqueue failures.
             if (self?.tick ?? 0) % 10 == 0 {
+                self?.reapDeadSessions()
                 self?.checkOrphanedSessions()
             }
             // Every 2 seconds, sync the active session indicator with iTerm2's current tab.
@@ -315,13 +317,41 @@ final class StatusStore {
         }
     }
 
+    /// Safety net: removes sessions whose Claude process is dead or unknown.
+    /// Catches: kqueue failures, PID recycling, missing claudePid (old hook),
+    /// and fallback sessions that the orphan checker skips.
+    private func reapDeadSessions() {
+        let staleThreshold = Date().timeIntervalSince1970 - 120
+        var deadItermIds: [String] = []
+        for session in sessions {
+            if let pid = session.claudePid {
+                // Has a PID — check if the process is still alive.
+                if kill(pid_t(pid), 0) != 0 && errno != EPERM {
+                    processSources[session.itermSessionId]?.cancel()
+                    processSources.removeValue(forKey: session.itermSessionId)
+                    deadItermIds.append(session.itermSessionId)
+                }
+            } else if session.lastUpdated < staleThreshold {
+                // No PID at all (old hook version) — remove if stale.
+                // Without a PID we can't watch the process, so time is
+                // the only signal that the session is dead.
+                deadItermIds.append(session.itermSessionId)
+            }
+        }
+        for itermId in deadItermIds {
+            removeSessionFiles(withItermId: itermId)
+        }
+    }
+
     /// Queries iTerm2 for all active session IDs and removes session files whose
     /// iTerm2 tab no longer exists (e.g. the user closed the terminal tab).
     private func checkOrphanedSessions() {
         // Skip for the first 30s after launch — iTerm2 may return an incomplete
         // session list immediately after Megadesk restarts, causing false deletions.
         guard Date().timeIntervalSince(startupTime) > 30 else { return }
+        // Check if iTerm2 is running first to avoid launching it via AppleScript.
         let script = """
+        if application "iTerm2" is not running then return {}
         tell application "iTerm2"
             set ids to {}
             repeat with w in windows
@@ -338,7 +368,10 @@ final class StatusStore {
         DispatchQueue.global(qos: .utility).async { [weak self] in
             let appleScript = NSAppleScript(source: script)
             var error: NSDictionary?
-            guard let result = appleScript?.executeAndReturnError(&error) else { return }
+            guard let result = appleScript?.executeAndReturnError(&error) else {
+                if let error { print("[Megadesk] checkOrphanedSessions AppleScript error: \(error)") }
+                return
+            }
 
             var activeIds: Set<String> = []
             let count = result.numberOfItems
@@ -350,17 +383,26 @@ final class StatusStore {
                 }
             }
 
-            // If we got no IDs back, play it safe — iTerm2 might have no windows open
-            // or returned an unexpected result. Don't wipe everything.
-            guard !activeIds.isEmpty else { return }
-
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
+                let staleThreshold = Date().timeIntervalSince1970 - 120
+
+                // When activeIds is empty, iTerm2 has no windows open (or is not running).
+                // All non-fallback stale sessions are orphaned — clean them up.
+                if activeIds.isEmpty {
+                    let orphanedItermIds = self.sessions
+                        .filter { $0.itermSessionId != $0.sessionId && $0.lastUpdated < staleThreshold }
+                        .map(\.itermSessionId)
+                    for itermId in orphanedItermIds {
+                        self.removeSessionFiles(withItermId: itermId)
+                    }
+                    return
+                }
+
                 // Collect iTerm session IDs that are no longer present in iTerm2.
                 // Skip fallback sessions (itermSessionId == sessionId) — those aren't iTerm2 sessions.
                 // Also skip recently-updated sessions: inside tmux $ITERM_SESSION_ID can be stale
                 // (e.g. after detach/reattach), but Claude is still actively writing hook events.
-                let staleThreshold = Date().timeIntervalSince1970 - 120
                 let orphanedItermIds = self.sessions
                     .filter { s in
                         // Strip tmux pane suffix (format: "{iterm_uuid}:{tmux_pane}") before
