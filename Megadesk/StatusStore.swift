@@ -6,8 +6,8 @@ import Darwin
 @Observable
 final class StatusStore {
     var sessions: [Session] = []
-    var tick: Int = 0
-    var customNames: [String: String] = [:]
+    var tick: Int = 0  // increments every second to force time re-renders
+    var customNames: [String: String] = [:]  // itermSessionId → custom display name
 
     // MARK: PR Tracking
     var trackedPRs: [TrackedPR] = []
@@ -30,6 +30,7 @@ final class StatusStore {
     private var lastCycleIndex: Int? = nil
     private let startupTime = Date()
 
+    // kqueue-based process watchers: itermSessionId → DispatchSourceProcess
     private var processSources: [String: DispatchSourceProcess] = [:]
 
     init() {
@@ -113,7 +114,9 @@ final class StatusStore {
     }
 
     func dismiss(session: Session) {
+        // Remove immediately from UI
         sessions.removeAll { $0.id == session.id }
+        // Delete the file — session reappears automatically on next hook event
         let file = sessionsURL.appendingPathComponent("\(session.sessionId).json")
         try? FileManager.default.removeItem(at: file)
     }
@@ -154,6 +157,7 @@ final class StatusStore {
             loaded.append(session)
         }
 
+        // Deduplicate by iTerm session ID — one terminal tab = one card
         var seen: [String: Session] = [:]
         for s in loaded {
             if let existing = seen[s.itermSessionId] {
@@ -231,8 +235,12 @@ final class StatusStore {
     private func startTimer() {
         timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             self?.tick += 1
+            // Reload every tick as a fallback — small JSON files, negligible cost.
+            // The file watcher handles instant updates; this catches any missed events.
             self?.loadSessions()
+            // Every 10 seconds, check for orphaned iTerm2 sessions.
             if (self?.tick ?? 0) % 10 == 0 { self?.checkOrphanedSessions() }
+            // Every 2 seconds, sync the active session indicator with the current terminal tab.
             if (self?.tick ?? 0) % 2 == 0 { self?.syncActiveSession() }
         }
     }
@@ -275,18 +283,24 @@ final class StatusStore {
         }
     }
 
+    /// Registers kqueue watchers for any new sessions that have a claudePid,
+    /// and cancels watchers for sessions that are no longer in the list.
+    /// When a watched process exits, the card is removed instantly via kqueue notification.
     private func updateProcessWatchers() {
         let activeIds = Set(sessions.compactMap { $0.claudePid != nil ? $0.itermSessionId : nil })
 
+        // Cancel watchers for sessions no longer loaded
         for id in Set(processSources.keys).subtracting(activeIds) {
             processSources[id]?.cancel()
             processSources.removeValue(forKey: id)
         }
 
+        // Register watchers for new sessions
         for session in sessions {
             guard let pid = session.claudePid,
                   processSources[session.itermSessionId] == nil else { continue }
 
+            // If already dead, remove immediately
             guard kill(pid_t(pid), 0) == 0 || errno == EPERM else {
                 removeSessionFiles(withItermId: session.itermSessionId)
                 continue
@@ -307,9 +321,12 @@ final class StatusStore {
         }
     }
 
-    /// Removes session files for iTerm2 tabs that no longer exist.
+    /// Queries iTerm2 for all active session IDs and removes session files whose
+    /// iTerm2 tab no longer exists (e.g. the user closed the terminal tab).
     /// Ghostty/unknown sessions rely on process watchers for cleanup.
     private func checkOrphanedSessions() {
+        // Skip for the first 30s after launch — iTerm2 may return an incomplete
+        // session list immediately after Megadesk restarts, causing false deletions.
         guard Date().timeIntervalSince(startupTime) > 30 else { return }
         guard hasItermSessions else { return }
 
@@ -342,14 +359,20 @@ final class StatusStore {
                 }
             }
 
+            // If we got no IDs back, play it safe — iTerm2 might have no windows open
+            // or returned an unexpected result. Don't wipe everything.
             guard !activeIds.isEmpty else { return }
 
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
+                // Collect iTerm session IDs that are no longer present in iTerm2.
+                // Skip recently-updated sessions: inside tmux $ITERM_SESSION_ID can be stale
+                // (e.g. after detach/reattach), but Claude is still actively writing hook events.
                 let staleThreshold = Date().timeIntervalSince1970 - 120
                 let orphanedItermIds = self.sessions
                     .filter { s in
                         guard s.terminal == .iterm2 else { return false }
+                        // Strip tmux pane suffix before comparing against iTerm2 active IDs
                         let bareId = s.itermSessionId.components(separatedBy: ":").first ?? s.itermSessionId
                         return s.itermSessionId != s.sessionId &&
                             !activeIds.contains(bareId) &&
@@ -364,6 +387,8 @@ final class StatusStore {
         }
     }
 
+    /// Deletes all session JSON files that belong to the given iTerm2 session ID,
+    /// then reloads the session list.
     private func removeSessionFiles(withItermId itermId: String) {
         let fm = FileManager.default
         guard let files = try? fm.contentsOfDirectory(at: sessionsURL, includingPropertiesForKeys: nil) else { return }
@@ -384,6 +409,8 @@ final class StatusStore {
 
     private func cycleSession(forward: Bool) {
         guard !sessions.isEmpty else { return }
+        // Seed lastCycleIndex from the already-tracked activeSessionId
+        // (kept up to date by syncActiveSession every 2s).
         if lastCycleIndex == nil, let activeId = activeSessionId,
            let idx = sessions.firstIndex(where: { $0.sessionId == activeId }) {
             lastCycleIndex = idx
@@ -493,6 +520,7 @@ final class StatusStore {
         process.standardOutput = pipe
         process.standardError = Pipe()
 
+        // Watchdog: terminate after 15 seconds
         let watchdog = DispatchWorkItem { process.terminate() }
         DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 15, execute: watchdog)
 

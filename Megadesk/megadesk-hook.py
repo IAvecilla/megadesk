@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Megadesk hook for Claude Code.
-Writes session state to ~/.claude/megadesk/sessions/<session_id>.json
+Megadesk hook script for Claude Code.
+Reads hook event from stdin, writes session state to ~/.claude/megadesk/sessions/<session_id>.json
 """
 import json
 import os
@@ -40,7 +40,7 @@ def _find_claude_pid() -> int:
             pid = ppid
         except Exception:
             break
-    return os.getppid()
+    return os.getppid()  # fallback
 
 
 def _get_ghostty_terminal_id() -> str:
@@ -61,6 +61,7 @@ def main():
         raw = sys.stdin.read()
         if not raw.strip():
             return
+
         data = json.loads(raw)
     except (json.JSONDecodeError, ValueError):
         return
@@ -70,6 +71,7 @@ def main():
         return
 
     hook_event = data.get("hook_event_name", "")
+    # Notification events: don't change state
     if hook_event == "Notification":
         return
 
@@ -77,6 +79,8 @@ def main():
     if new_state is None:
         return
 
+    # On Stop: if last_assistant_message starts with "interrupted", tag as StopInterrupted
+    # so the widget can detect cancellations instantly without waiting for a timeout.
     if hook_event == "Stop":
         last_msg = data.get("last_assistant_message", "") or ""
         if last_msg.lstrip().lower().startswith("interrupted"):
@@ -89,10 +93,13 @@ def main():
     # iTerm2 session ID: "w0t0p0:UUID" → extract UUID
     iterm_raw = os.environ.get("ITERM_SESSION_ID", "")
     iterm_session_id = iterm_raw.split(":", 1)[-1] if ":" in iterm_raw else iterm_raw
-    # Inside tmux, append pane ID so each pane gets its own card
+    # Inside tmux, all panes of the same iTerm2 tab share $ITERM_SESSION_ID.
+    # Append the tmux pane ID so each pane gets its own card.
     tmux_pane = os.environ.get("TMUX_PANE", "")
     if tmux_pane and iterm_session_id:
         iterm_session_id = f"{iterm_session_id}:{tmux_pane}"
+    # If not running inside iTerm2, fall back to session_id so deduplication
+    # doesn't collapse all sessions onto the same empty-string key.
     if not iterm_session_id:
         iterm_session_id = session_id
 
@@ -108,7 +115,7 @@ def main():
 
     now = time.time()
 
-    # Preserve persistent fields across writes
+    # Read existing data to preserve state_since, created_at, and ghostty_terminal_id across writes
     state_since = now
     created_at = now
     ghostty_terminal_id = ""
@@ -153,7 +160,10 @@ def main():
             except (json.JSONDecodeError, OSError):
                 pass
 
-    # Atomic write: rename triggers DispatchSource file watcher
+    # Atomic write: write to .tmp then rename into place.
+    # A rename within the same directory triggers NOTE_WRITE on the directory vnode,
+    # which is what DispatchSource watches — plain write_text() on an existing file
+    # only modifies the file vnode and the watcher never fires.
     tmp_file = session_file.with_suffix(".tmp")
     try:
         tmp_file.write_text(json.dumps(session_data, indent=2))

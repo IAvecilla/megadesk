@@ -28,18 +28,23 @@ struct Session: Identifiable, Codable {
 
     var isWorking: Bool { state == "working" }
 
+    var isStale: Bool {
+        Date().timeIntervalSince1970 - lastUpdated > 300
+    }
+
     var timeInState: TimeInterval {
         Date().timeIntervalSince1970 - stateSince
     }
 
-    /// Last hook was PreToolUse and nothing has updated in >4s —
-    /// Claude is waiting for the user to approve/deny a confirmation.
+    /// Last hook was PreToolUse for a non-Bash tool and nothing has updated in >4s —
+    /// Claude is almost certainly waiting for the user to approve/deny a confirmation.
+    /// Bash is excluded because it can run legitimately for minutes.
     var needsConfirmation: Bool {
         guard isWorking && lastEvent == "PreToolUse" else { return false }
         return Date().timeIntervalSince1970 - lastUpdated > 4
     }
 
-    /// Session has been in "waiting" state longer than the configured threshold.
+    /// Session has been in "waiting" state for longer than the configured threshold — effectively idle.
     var isForgotten: Bool {
         !isWorking && timeInState > TimeInterval(AppSettings.shared.forgottenMinutes * 60)
     }

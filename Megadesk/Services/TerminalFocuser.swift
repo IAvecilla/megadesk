@@ -20,6 +20,7 @@ struct TerminalFocuser {
 
     @discardableResult
     static func focusiTerm2(sessionId: String) -> Bool {
+        // sessionId is the bare UUID (hook script strips the "w0t0p0:" prefix).
         // Inside tmux the format is "{uuid}:{tmux_pane}" — strip the suffix.
         let rawId = sessionId.components(separatedBy: ":").first ?? sessionId
         guard !rawId.isEmpty else { return false }
