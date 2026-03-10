@@ -66,7 +66,7 @@ The time displayed on the right shows how long the session has been in its curre
 
 ### Interacting with sessions
 
-**Click a card** — focuses the corresponding terminal tab. For iTerm2, Megadesk switches directly to the exact tab via AppleScript. For Ghostty, Megadesk uses the macOS Accessibility API to identify and switch to the correct tab.
+**Click a card** — focuses the corresponding terminal tab and pane via AppleScript. Works with both iTerm2 and Ghostty, including split panes.
 
 **Rename a session** — hover over a card and click the pencil icon (✏) that appears. Type a name and press Enter to confirm, Escape to cancel. Custom names persist even when you `cd` into a different directory in that tab. To revert to the auto-detected name, click the ↩ button that appears while editing.
 
@@ -144,12 +144,10 @@ Click the Megadesk icon in the menu bar to access:
 
 - **Session state may not always update correctly.** Megadesk relies entirely on Claude Code hooks to detect state changes. If a session is interrupted (e.g. you cancel a running task with `Ctrl+C`), the hook may not fire and the card can remain stuck on "working" until the next event arrives. This is a limitation of the hook-based approach rather than something Megadesk can work around on its own.
 
-- **Ghostty tab focus is approximate.** Ghostty does not yet expose per-tab session IDs or an AppleScript dictionary for focusing specific tabs ([tracking discussion](https://github.com/ghostty-org/ghostty/discussions/10603)). Megadesk works around this by matching tabs to sessions via the macOS Accessibility API and the tab's working directory. The first click after launching Megadesk (or after opening/closing tabs) briefly cycles through tabs to build a mapping; subsequent clicks are instant. If multiple sessions share the same directory, Megadesk assigns each to a different tab, but the assignment may not always be correct. **Split panes within a tab are supported** — during the tab scan, Megadesk cycles through panes using `Cmd+]` (`goto_split:next`) to read each pane's directory, so clicking a session card focuses the correct tab even if the session is in a non-focused pane. However, pane-level focus within a tab is not possible (Ghostty doesn't expose per-pane identifiers). This pane-cycling depends on the default `Cmd+]` keybinding; if remapped, Megadesk falls back to single-directory-per-tab behavior. These limitations will be resolved when Ghostty adds native tab/pane identification.
-
 ---
 
 ## How it works
 
-On install, Megadesk copies `megadesk-hook.py` to `~/.claude/` and registers it as a hook for five Claude Code events: `PreToolUse`, `PostToolUse`, `Stop`, `UserPromptSubmit`, and `SessionStart`. Each time one of these fires, the hook writes a small JSON payload to a local socket that Megadesk listens on, updating the session card in real time.
+On install, Megadesk copies `megadesk-hook.py` to `~/.claude/` and registers it as a hook for five Claude Code events: `PreToolUse`, `PostToolUse`, `Stop`, `UserPromptSubmit`, and `SessionStart`. Each time one of these fires, the hook writes a small JSON file to `~/.claude/megadesk/sessions/`, which Megadesk watches via kqueue to update the session card in real time. For Ghostty, the hook also captures the terminal's unique ID via AppleScript at session start, enabling precise tab and split-pane focusing.
 
 No data leaves your machine. The hook runs locally and Megadesk never makes any network requests except through the `gh` CLI for PR status.
