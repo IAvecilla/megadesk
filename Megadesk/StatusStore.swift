@@ -343,6 +343,12 @@ final class StatusStore {
         }
     }
 
+    /// Returns true if the session's Claude process is still running.
+    private func isClaudePidAlive(_ session: Session) -> Bool {
+        guard let pid = session.claudePid else { return false }
+        return kill(pid_t(pid), 0) == 0 || errno == EPERM
+    }
+
     /// Queries iTerm2 for all active session IDs and removes session files whose
     /// iTerm2 tab no longer exists (e.g. the user closed the terminal tab).
     private func checkOrphanedSessions() {
@@ -389,9 +395,14 @@ final class StatusStore {
 
                 // When activeIds is empty, iTerm2 has no windows open (or is not running).
                 // All non-fallback stale sessions are orphaned — clean them up.
+                // But never remove a session whose Claude process is still alive.
                 if activeIds.isEmpty {
                     let orphanedItermIds = self.sessions
-                        .filter { $0.itermSessionId != $0.sessionId && $0.lastUpdated < staleThreshold }
+                        .filter {
+                            $0.itermSessionId != $0.sessionId &&
+                            $0.lastUpdated < staleThreshold &&
+                            !self.isClaudePidAlive($0)
+                        }
                         .map(\.itermSessionId)
                     for itermId in orphanedItermIds {
                         self.removeSessionFiles(withItermId: itermId)
@@ -410,7 +421,8 @@ final class StatusStore {
                         let bareId = s.itermSessionId.components(separatedBy: ":").first ?? s.itermSessionId
                         return s.itermSessionId != s.sessionId &&
                             !activeIds.contains(bareId) &&
-                            s.lastUpdated < staleThreshold
+                            s.lastUpdated < staleThreshold &&
+                            !self.isClaudePidAlive(s)
                     }
                     .map(\.itermSessionId)
 
