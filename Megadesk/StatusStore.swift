@@ -83,13 +83,13 @@ final class StatusStore {
 
         let found = TerminalFocuser.focus(session: session)
 
-        // Tmux sessions may outlive their original iTerm2 tab — don't remove the card
+        // Tmux sessions may outlive their original terminal tab — don't remove the card
         if !found && session.terminal == .iterm2 && session.itermSessionId.contains(":") {
             activeSessionId = session.sessionId
             return true
         }
 
-        // Ghostty fallback: just activate the app if precise focus fails
+        // Fallback: just activate the app if precise focus fails
         if !found && session.terminal == .ghostty {
             NSWorkspace.shared.open(URL(fileURLWithPath: "/Applications/Ghostty.app"))
             activeSessionId = session.sessionId
@@ -154,7 +154,7 @@ final class StatusStore {
             loaded.append(session)
         }
 
-        // Deduplicate by iTerm session ID — one terminal tab = one card
+        // Deduplicate by terminal session ID — one terminal tab = one card
         var seen: [String: Session] = [:]
         for s in loaded {
             if let existing = seen[s.itermSessionId] {
@@ -236,7 +236,7 @@ final class StatusStore {
             // Reload every tick as a fallback — small JSON files, negligible cost.
             // The file watcher handles instant updates; this catches any missed events.
             self?.loadSessions()
-            // Every 10 seconds, check for orphaned iTerm2 sessions.
+            // Every 10 seconds, check for orphaned sessions.
             if (self?.tick ?? 0) % 10 == 0 { self?.checkOrphanedSessions() }
             // Every 2 seconds, sync the active session indicator with the current terminal tab.
             if (self?.tick ?? 0) % 2 == 0 { self?.syncActiveSession() }
@@ -348,9 +348,8 @@ final class StatusStore {
         }
     }
 
-    /// Queries iTerm2 for all active session IDs and removes session files whose
-    /// iTerm2 tab no longer exists (e.g. the user closed the terminal tab).
-    /// Ghostty/unknown sessions rely on process watchers for cleanup.
+    /// Removes session files for terminal tabs that no longer exist.
+    /// Non-iTerm2 sessions rely on process watchers for cleanup.
     private func checkOrphanedSessions() {
         // Skip for the first 30s after launch — iTerm2 may return an incomplete
         // session list immediately after Megadesk restarts, causing false deletions.
@@ -392,14 +391,14 @@ final class StatusStore {
 
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
-                // Collect iTerm session IDs that are no longer present in iTerm2.
-                // Skip recently-updated sessions: inside tmux $ITERM_SESSION_ID can be stale
+                // Collect session IDs that are no longer present.
+                // Skip recently-updated sessions: inside tmux the session ID can be stale
                 // (e.g. after detach/reattach), but Claude is still actively writing hook events.
                 let staleThreshold = Date().timeIntervalSince1970 - 120
                 let orphanedItermIds = self.sessions
                     .filter { s in
                         guard s.terminal == .iterm2 else { return false }
-                        // Strip tmux pane suffix before comparing against iTerm2 active IDs
+                        // Strip tmux pane suffix before comparing against active IDs
                         let bareId = s.itermSessionId.components(separatedBy: ":").first ?? s.itermSessionId
                         return s.itermSessionId != s.sessionId &&
                             !activeIds.contains(bareId) &&
@@ -414,7 +413,7 @@ final class StatusStore {
         }
     }
 
-    /// Deletes all session JSON files that belong to the given iTerm2 session ID,
+    /// Deletes all session JSON files that belong to the given terminal session ID,
     /// then reloads the session list.
     private func removeSessionFiles(withItermId itermId: String) {
         let fm = FileManager.default

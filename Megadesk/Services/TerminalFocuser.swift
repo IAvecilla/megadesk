@@ -16,8 +16,6 @@ struct TerminalFocuser {
         }
     }
 
-    // MARK: - iTerm2
-
     @discardableResult
     static func focusiTerm2(sessionId: String) -> Bool {
         // sessionId is the bare UUID (hook script strips the "w0t0p0:" prefix).
@@ -53,8 +51,6 @@ struct TerminalFocuser {
         return runAppleScript(script, permissionTerminal: "iTerm2")
     }
 
-    // MARK: - Ghostty
-
     @discardableResult
     static func focusGhostty(terminalId: String, cwd: String) -> Bool {
         let escapedId = terminalId.replacingOccurrences(of: "\"", with: "\\\"")
@@ -87,8 +83,6 @@ struct TerminalFocuser {
         return runAppleScript(script, permissionTerminal: "Ghostty")
     }
 
-    // MARK: - Helpers
-
     private static func runAppleScript(_ source: String, permissionTerminal: String) -> Bool {
         var error: NSDictionary?
         guard let appleScript = NSAppleScript(source: source) else { return false }
@@ -99,8 +93,6 @@ struct TerminalFocuser {
         }
         return result.booleanValue
     }
-
-    // MARK: - Permissions
 
     private static var hasShownPermissionAlert = false
 
