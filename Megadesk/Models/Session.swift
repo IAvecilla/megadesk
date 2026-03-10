@@ -17,8 +17,8 @@ struct Session: Identifiable, Codable {
     let lastEvent: String
     let itermSessionId: String
     let terminal: TerminalType
-    let tty: String
     let claudePid: Int32?
+    let ghosttyTerminalId: String
 
     var id: String { sessionId }
 
@@ -28,23 +28,18 @@ struct Session: Identifiable, Codable {
 
     var isWorking: Bool { state == "working" }
 
-    var isStale: Bool {
-        Date().timeIntervalSince1970 - lastUpdated > 300
-    }
-
     var timeInState: TimeInterval {
         Date().timeIntervalSince1970 - stateSince
     }
 
-    /// Last hook was PreToolUse for a non-Bash tool and nothing has updated in >4s —
-    /// Claude is almost certainly waiting for the user to approve/deny a confirmation.
-    /// Bash is excluded because it can run legitimately for minutes.
+    /// Last hook was PreToolUse and nothing has updated in >4s —
+    /// Claude is waiting for the user to approve/deny a confirmation.
     var needsConfirmation: Bool {
         guard isWorking && lastEvent == "PreToolUse" else { return false }
         return Date().timeIntervalSince1970 - lastUpdated > 4
     }
 
-    /// Session has been in "waiting" state for longer than the configured threshold — effectively idle.
+    /// Session has been in "waiting" state longer than the configured threshold.
     var isForgotten: Bool {
         !isWorking && timeInState > TimeInterval(AppSettings.shared.forgottenMinutes * 60)
     }
@@ -60,8 +55,8 @@ struct Session: Identifiable, Codable {
         case lastEvent = "last_event"
         case itermSessionId = "iterm_session_id"
         case terminal
-        case tty
         case claudePid = "claude_pid"
+        case ghosttyTerminalId = "ghostty_terminal_id"
     }
 
     init(from decoder: Decoder) throws {
@@ -76,7 +71,7 @@ struct Session: Identifiable, Codable {
         lastEvent = try c.decode(String.self, forKey: .lastEvent)
         itermSessionId = try c.decode(String.self, forKey: .itermSessionId)
         terminal = try c.decodeIfPresent(TerminalType.self, forKey: .terminal) ?? .iterm2
-        tty = try c.decodeIfPresent(String.self, forKey: .tty) ?? ""
         claudePid = try c.decodeIfPresent(Int32.self, forKey: .claudePid)
+        ghosttyTerminalId = try c.decodeIfPresent(String.self, forKey: .ghosttyTerminalId) ?? ""
     }
 }

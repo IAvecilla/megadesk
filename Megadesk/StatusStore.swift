@@ -6,8 +6,8 @@ import Darwin
 @Observable
 final class StatusStore {
     var sessions: [Session] = []
-    var tick: Int = 0  // increments every second to force time re-renders
-    var customNames: [String: String] = [:]  // itermSessionId → custom display name
+    var tick: Int = 0
+    var customNames: [String: String] = [:]
 
     // MARK: PR Tracking
     var trackedPRs: [TrackedPR] = []
@@ -30,7 +30,6 @@ final class StatusStore {
     private var lastCycleIndex: Int? = nil
     private let startupTime = Date()
 
-    // kqueue-based process watchers: itermSessionId → DispatchSourceProcess
     private var processSources: [String: DispatchSourceProcess] = [:]
 
     init() {
@@ -70,9 +69,7 @@ final class StatusStore {
 
     @discardableResult
     func focusTerminal(session: Session) -> Bool {
-        // Ghostty and other known terminals can still be activated even without a
-        // per-tab session ID. Only skip focus for truly unknown terminals that fell
-        // back to using the Claude session ID as the terminal ID.
+        // Unknown terminals without a real session ID can't be focused
         if session.itermSessionId == session.sessionId && session.terminal == .unknown {
             activeSessionId = session.sessionId
             return true
@@ -80,19 +77,15 @@ final class StatusStore {
 
         let found = TerminalFocuser.focus(session: session)
 
-        // For tmux sessions the stored iterm_session_id is "{UUID}:{tmux_pane}".
-        // If focus fails it means the *original* iTerm2 tab was closed (e.g. after
-        // detach/reattach), but Claude is still running inside tmux — don't delete the card.
+        // Tmux sessions may outlive their original iTerm2 tab — don't remove the card
         if !found && session.terminal == .iterm2 && session.itermSessionId.contains(":") {
             activeSessionId = session.sessionId
             return true
         }
 
-        // Ghostty doesn't expose per-pane IDs, so split panes within the same tab
-        // can't always be individually focused. Activate the app as a fallback and
-        // keep the card alive — the session is still running.
+        // Ghostty fallback: just activate the app if precise focus fails
         if !found && session.terminal == .ghostty {
-            NSWorkspace.shared.launchApplication("Ghostty")
+            NSWorkspace.shared.open(URL(fileURLWithPath: "/Applications/Ghostty.app"))
             activeSessionId = session.sessionId
             return true
         }
@@ -120,9 +113,7 @@ final class StatusStore {
     }
 
     func dismiss(session: Session) {
-        // Remove immediately from UI
         sessions.removeAll { $0.id == session.id }
-        // Delete the file — session reappears automatically on next hook event
         let file = sessionsURL.appendingPathComponent("\(session.sessionId).json")
         try? FileManager.default.removeItem(at: file)
     }
@@ -163,7 +154,6 @@ final class StatusStore {
             loaded.append(session)
         }
 
-        // Deduplicate by iTerm session ID — one terminal tab = one card
         var seen: [String: Session] = [:]
         for s in loaded {
             if let existing = seen[s.itermSessionId] {
@@ -241,60 +231,62 @@ final class StatusStore {
     private func startTimer() {
         timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             self?.tick += 1
-            // Reload every tick as a fallback — small JSON files, negligible cost.
-            // The file watcher handles instant updates; this catches any missed events.
             self?.loadSessions()
-            // Every 10 seconds, ask iTerm2 which tabs are still alive and remove orphaned cards.
-            if (self?.tick ?? 0) % 10 == 0 {
-                self?.checkOrphanedSessions()
-            }
-            // Every 2 seconds, sync the active session indicator with iTerm2's current tab.
-            if (self?.tick ?? 0) % 2 == 0 {
-                self?.syncActiveSession()
-            }
+            if (self?.tick ?? 0) % 10 == 0 { self?.checkOrphanedSessions() }
+            if (self?.tick ?? 0) % 2 == 0 { self?.syncActiveSession() }
         }
     }
 
-    /// Whether any sessions are real iTerm2 sessions (not fallback IDs).
     private var hasItermSessions: Bool {
         sessions.contains { $0.terminal == .iterm2 && $0.itermSessionId != $0.sessionId }
     }
 
-    private func syncActiveSession() {
-        // Only sync with iTerm2 — Ghostty doesn't expose per-tab session IDs yet
-        guard hasItermSessions else { return }
+    private var hasGhosttySessions: Bool {
+        sessions.contains { $0.terminal == .ghostty }
+    }
 
-        detectCurrentItermSession { [weak self] currentId in
-            DispatchQueue.main.async {
-                guard let self, let currentId else { return }
-                guard let match = self.sessions.first(where: {
-                    $0.itermSessionId.components(separatedBy: ":").first == currentId
-                }) else { return }
-                if self.activeSessionId != match.sessionId {
-                    self.activeSessionId = match.sessionId
+    private func syncActiveSession() {
+        if hasItermSessions {
+            detectCurrentItermSession { [weak self] currentId in
+                DispatchQueue.main.async {
+                    guard let self, let currentId else { return }
+                    guard let match = self.sessions.first(where: {
+                        $0.itermSessionId.components(separatedBy: ":").first == currentId
+                    }) else { return }
+                    if self.activeSessionId != match.sessionId {
+                        self.activeSessionId = match.sessionId
+                    }
+                }
+            }
+        }
+
+        if hasGhosttySessions {
+            detectCurrentGhosttySession { [weak self] terminalId in
+                DispatchQueue.main.async {
+                    guard let self, let terminalId else { return }
+                    guard let match = self.sessions.first(where: {
+                        $0.terminal == .ghostty && $0.ghosttyTerminalId == terminalId
+                    }) else { return }
+                    if self.activeSessionId != match.sessionId {
+                        self.activeSessionId = match.sessionId
+                    }
                 }
             }
         }
     }
 
-    /// Registers kqueue watchers for any new sessions that have a claudePid,
-    /// and cancels watchers for sessions that are no longer in the list.
-    /// When a watched process exits, the card is removed instantly via kqueue notification.
     private func updateProcessWatchers() {
         let activeIds = Set(sessions.compactMap { $0.claudePid != nil ? $0.itermSessionId : nil })
 
-        // Cancel watchers for sessions no longer loaded
         for id in Set(processSources.keys).subtracting(activeIds) {
             processSources[id]?.cancel()
             processSources.removeValue(forKey: id)
         }
 
-        // Register watchers for new sessions
         for session in sessions {
             guard let pid = session.claudePid,
                   processSources[session.itermSessionId] == nil else { continue }
 
-            // If already dead, remove immediately
             guard kill(pid_t(pid), 0) == 0 || errno == EPERM else {
                 removeSessionFiles(withItermId: session.itermSessionId)
                 continue
@@ -315,15 +307,10 @@ final class StatusStore {
         }
     }
 
-    /// Queries iTerm2 for all active session IDs and removes session files whose
-    /// iTerm2 tab no longer exists (e.g. the user closed the terminal tab).
-    /// Non-iTerm2 sessions (Ghostty, unknown) rely on process watchers for cleanup.
+    /// Removes session files for iTerm2 tabs that no longer exist.
+    /// Ghostty/unknown sessions rely on process watchers for cleanup.
     private func checkOrphanedSessions() {
-        // Skip for the first 30s after launch — iTerm2 may return an incomplete
-        // session list immediately after Megadesk restarts, causing false deletions.
         guard Date().timeIntervalSince(startupTime) > 30 else { return }
-
-        // Only check iTerm2 orphans if there are iTerm2 sessions to check
         guard hasItermSessions else { return }
 
         let script = """
@@ -355,23 +342,14 @@ final class StatusStore {
                 }
             }
 
-            // If we got no IDs back, play it safe — iTerm2 might have no windows open
-            // or returned an unexpected result. Don't wipe everything.
             guard !activeIds.isEmpty else { return }
 
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
-                // Collect iTerm session IDs that are no longer present in iTerm2.
-                // Only check iTerm2 sessions — Ghostty/unknown sessions use process watchers.
-                // Skip fallback sessions (itermSessionId == sessionId) — those aren't iTerm2 sessions.
-                // Also skip recently-updated sessions: inside tmux $ITERM_SESSION_ID can be stale
-                // (e.g. after detach/reattach), but Claude is still actively writing hook events.
                 let staleThreshold = Date().timeIntervalSince1970 - 120
                 let orphanedItermIds = self.sessions
                     .filter { s in
                         guard s.terminal == .iterm2 else { return false }
-                        // Strip tmux pane suffix (format: "{iterm_uuid}:{tmux_pane}") before
-                        // comparing against iTerm2 active IDs, which only know the bare UUID.
                         let bareId = s.itermSessionId.components(separatedBy: ":").first ?? s.itermSessionId
                         return s.itermSessionId != s.sessionId &&
                             !activeIds.contains(bareId) &&
@@ -386,8 +364,6 @@ final class StatusStore {
         }
     }
 
-    /// Deletes all session JSON files that belong to the given iTerm2 session ID,
-    /// then reloads the session list.
     private func removeSessionFiles(withItermId itermId: String) {
         let fm = FileManager.default
         guard let files = try? fm.contentsOfDirectory(at: sessionsURL, includingPropertiesForKeys: nil) else { return }
@@ -408,8 +384,6 @@ final class StatusStore {
 
     private func cycleSession(forward: Bool) {
         guard !sessions.isEmpty else { return }
-        // If starting a new cycle, seed lastCycleIndex from the already-tracked activeSessionId
-        // (kept up to date by syncActiveSession every 2s) — no async call needed.
         if lastCycleIndex == nil, let activeId = activeSessionId,
            let idx = sessions.firstIndex(where: { $0.sessionId == activeId }) {
             lastCycleIndex = idx
@@ -427,7 +401,7 @@ final class StatusStore {
         }
         lastCycleIndex = next
         let session = sessions[next]
-        focusTerminal(session: session)  // also sets activeSessionId
+        focusTerminal(session: session)
         flashTimer?.invalidate()
         flashTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: false) { [weak self] _ in
             self?.lastCycleIndex = nil
@@ -445,6 +419,20 @@ final class StatusStore {
             var error: NSDictionary?
             let result = appleScript?.executeAndReturnError(&error)
             completion(result?.stringValue)
+        }
+    }
+
+    private func detectCurrentGhosttySession(completion: @escaping (String?) -> Void) {
+        let script = """
+        tell application "Ghostty"
+            return id of focused terminal of selected tab of front window
+        end tell
+        """
+        DispatchQueue.global(qos: .userInitiated).async {
+            let appleScript = NSAppleScript(source: script)
+            var error: NSDictionary?
+            let result = appleScript?.executeAndReturnError(&error)
+            completion(error == nil ? result?.stringValue : nil)
         }
     }
 
@@ -505,7 +493,6 @@ final class StatusStore {
         process.standardOutput = pipe
         process.standardError = Pipe()
 
-        // Watchdog: terminate after 15 seconds
         let watchdog = DispatchWorkItem { process.terminate() }
         DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 15, execute: watchdog)
 
