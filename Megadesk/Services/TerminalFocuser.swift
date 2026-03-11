@@ -16,8 +16,7 @@ struct TerminalFocuser {
         }
     }
 
-    @discardableResult
-    static func focusiTerm2(sessionId: String) -> Bool {
+    private static func focusiTerm2(sessionId: String) -> Bool {
         // sessionId is the bare UUID (hook script strips the "w0t0p0:" prefix).
         // Inside tmux the format is "{uuid}:{tmux_pane}" — strip the suffix.
         let rawId = sessionId.components(separatedBy: ":").first ?? sessionId
@@ -51,8 +50,7 @@ struct TerminalFocuser {
         return runAppleScript(script, permissionTerminal: "iTerm2")
     }
 
-    @discardableResult
-    static func focusGhostty(terminalId: String, cwd: String) -> Bool {
+    private static func focusGhostty(terminalId: String, cwd: String) -> Bool {
         let escapedId = terminalId.replacingOccurrences(of: "\"", with: "\\\"")
         let escapedCwd = cwd.replacingOccurrences(of: "\\", with: "\\\\")
                             .replacingOccurrences(of: "\"", with: "\\\"")
@@ -94,11 +92,11 @@ struct TerminalFocuser {
         return result.booleanValue
     }
 
-    private static var hasShownPermissionAlert = false
+    private static var shownPermissionAlerts: Set<String> = []
 
     private static func showPermissionAlert(terminal: String) {
-        guard !hasShownPermissionAlert else { return }
-        hasShownPermissionAlert = true
+        guard !shownPermissionAlerts.contains(terminal) else { return }
+        shownPermissionAlerts.insert(terminal)
         DispatchQueue.main.async {
             let alert = NSAlert()
             alert.messageText = "Megadesk needs Automation permission"

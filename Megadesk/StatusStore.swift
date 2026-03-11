@@ -91,7 +91,9 @@ final class StatusStore {
 
         // Fallback: just activate the app if precise focus fails
         if !found && session.terminal == .ghostty {
-            NSWorkspace.shared.open(URL(fileURLWithPath: "/Applications/Ghostty.app"))
+            if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.mitchellh.ghostty") {
+                NSWorkspace.shared.open(url)
+            }
             activeSessionId = session.sessionId
             return true
         }
