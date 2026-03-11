@@ -107,6 +107,26 @@ def main():
         except (json.JSONDecodeError, OSError):
             pass
 
+    claude_pid = _find_claude_pid()
+
+    # On PreToolUse, snapshot the number of child processes under claude.
+    # The Swift side compares this against the live count to detect whether
+    # the tool has started executing (new child spawned) or is still waiting
+    # for user confirmation.
+    # Subtract 1 because the hook script itself is a child of claude while
+    # this runs, and it will have exited by the time Swift checks.
+    child_count = 0
+    if hook_event == "PreToolUse":
+        import subprocess
+        try:
+            out = subprocess.check_output(
+                ["pgrep", "-P", str(claude_pid)],
+                stderr=subprocess.DEVNULL, text=True,
+            ).strip()
+            child_count = max(0, len(out.splitlines()) - 1) if out else 0
+        except Exception:
+            child_count = 0
+
     session_data = {
         "session_id": session_id,
         "cwd": cwd,
@@ -117,7 +137,8 @@ def main():
         "tool_name": tool_name,
         "last_event": hook_event,
         "iterm_session_id": iterm_session_id,
-        "claude_pid": _find_claude_pid(),
+        "claude_pid": claude_pid,
+        "child_count": child_count,
     }
 
     # On SessionStart, remove stale files from the same iTerm tab
