@@ -33,6 +33,11 @@ final class StatusStore {
     // kqueue-based process watchers: itermSessionId → DispatchSourceProcess
     private var processSources: [String: DispatchSourceProcess] = [:]
 
+    // Cache of active iTerm2 session UUIDs, updated by checkOrphanedSessions every 10s.
+    // Used by reapDeadSessions/updateProcessWatchers to avoid removing sessions
+    // whose terminal tab is still alive (e.g. PID is stale after a Claude restart).
+    private var lastKnownActiveItermIds: Set<String> = []
+
     // JSONL watchers: sessionId → JSONLWatcher
     var activeToolDetails: [String: String] = [:]
     private var jsonlWatchers: [String: JSONLWatcher] = [:]
@@ -296,11 +301,9 @@ final class StatusStore {
             guard let pid = session.claudePid,
                   processSources[session.itermSessionId] == nil else { continue }
 
-            // If already dead, remove immediately
-            guard kill(pid_t(pid), 0) == 0 || errno == EPERM else {
-                removeSessionFiles(withItermId: session.itermSessionId)
-                continue
-            }
+            // If already dead, skip — reapDeadSessions or checkOrphanedSessions will
+            // handle cleanup with proper iTerm2 tab checks to avoid false removals.
+            guard kill(pid_t(pid), 0) == 0 || errno == EPERM else { continue }
 
             let itermId = session.itermSessionId
             let source = DispatchSource.makeProcessSource(
@@ -309,6 +312,7 @@ final class StatusStore {
                 queue: .main
             )
             source.setEventHandler { [weak self] in
+                print("[Megadesk] kqueue: PID \(pid) exited for iTerm \(itermId) — removing session")
                 self?.processSources.removeValue(forKey: itermId)
                 self?.removeSessionFiles(withItermId: itermId)
             }
@@ -320,6 +324,8 @@ final class StatusStore {
     /// Safety net: removes sessions whose Claude process is dead or unknown.
     /// Catches: kqueue failures, PID recycling, missing claudePid (old hook),
     /// and fallback sessions that the orphan checker skips.
+    /// Skips sessions whose iTerm2 tab is still alive — a dead stored PID may
+    /// just mean Claude was restarted and the hook hasn't fired yet.
     private func reapDeadSessions() {
         let staleThreshold = Date().timeIntervalSince1970 - 120
         var deadItermIds: [String] = []
@@ -327,6 +333,14 @@ final class StatusStore {
             if let pid = session.claudePid {
                 // Has a PID — check if the process is still alive.
                 if kill(pid_t(pid), 0) != 0 && errno != EPERM {
+                    // PID is dead, but don't remove if the iTerm2 tab is still open —
+                    // a new Claude process may have started that hasn't fired hooks yet.
+                    let bareId = session.itermSessionId.components(separatedBy: ":").first ?? session.itermSessionId
+                    if !lastKnownActiveItermIds.isEmpty && lastKnownActiveItermIds.contains(bareId) {
+                        print("[Megadesk] reapDeadSessions: PID \(pid) dead for \(session.projectName) but iTerm tab still alive — skipping")
+                        continue
+                    }
+                    print("[Megadesk] reapDeadSessions: removing \(session.projectName) (PID \(pid) dead, tab gone)")
                     processSources[session.itermSessionId]?.cancel()
                     processSources.removeValue(forKey: session.itermSessionId)
                     deadItermIds.append(session.itermSessionId)
@@ -335,6 +349,11 @@ final class StatusStore {
                 // No PID at all (old hook version) — remove if stale.
                 // Without a PID we can't watch the process, so time is
                 // the only signal that the session is dead.
+                let bareId = session.itermSessionId.components(separatedBy: ":").first ?? session.itermSessionId
+                if !lastKnownActiveItermIds.isEmpty && lastKnownActiveItermIds.contains(bareId) {
+                    continue
+                }
+                print("[Megadesk] reapDeadSessions: removing \(session.projectName) (no PID, stale)")
                 deadItermIds.append(session.itermSessionId)
             }
         }
@@ -391,6 +410,10 @@ final class StatusStore {
 
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
+
+                // Cache the active IDs for use by reapDeadSessions/updateProcessWatchers.
+                self.lastKnownActiveItermIds = activeIds
+
                 let staleThreshold = Date().timeIntervalSince1970 - 120
 
                 // When activeIds is empty, iTerm2 has no windows open (or is not running).
@@ -405,6 +428,7 @@ final class StatusStore {
                         }
                         .map(\.itermSessionId)
                     for itermId in orphanedItermIds {
+                        print("[Megadesk] checkOrphanedSessions: removing \(itermId) (no iTerm2 windows, stale, PID dead)")
                         self.removeSessionFiles(withItermId: itermId)
                     }
                     return
@@ -427,6 +451,7 @@ final class StatusStore {
                     .map(\.itermSessionId)
 
                 for itermId in orphanedItermIds {
+                    print("[Megadesk] checkOrphanedSessions: removing \(itermId) (tab gone, stale, PID dead)")
                     self.removeSessionFiles(withItermId: itermId)
                 }
             }
@@ -552,8 +577,12 @@ final class StatusStore {
         process.standardOutput = pipe
         process.standardError = Pipe()
 
-        // Watchdog: terminate after 15 seconds
-        let watchdog = DispatchWorkItem { process.terminate() }
+        // Watchdog: terminate after 15 seconds.
+        // Guard against racing with normal completion — terminate() on an
+        // already-finished Process throws NSInvalidArgumentException.
+        let watchdog = DispatchWorkItem {
+            if process.isRunning { process.terminate() }
+        }
         DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 15, execute: watchdog)
 
         DispatchQueue.global(qos: .utility).async { [weak self] in
