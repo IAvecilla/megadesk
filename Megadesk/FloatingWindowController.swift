@@ -70,8 +70,18 @@ private final class EditablePanel: NSPanel {
     override var canBecomeKey: Bool { true }
 
     override func rightMouseDown(with event: NSEvent) {
-        guard let menu = menu else { return super.rightMouseDown(with: event) }
-        NSMenu.popUpContextMenu(menu, with: event, for: contentView ?? self.contentView!)
+        guard let menu = menu, let contentView else { return super.rightMouseDown(with: event) }
+        // Only show the panel menu on empty background — not on cards/PRs
+        // (those will get their own context menus later).
+        let loc = contentView.convert(event.locationInWindow, from: nil)
+        let hitView = contentView.hitTest(loc)
+        // If the click landed on the hosting view itself (background), show the menu.
+        // If it landed on a subview (card content), let it handle the event.
+        if hitView === contentView || hitView == nil {
+            NSMenu.popUpContextMenu(menu, with: event, for: contentView)
+        } else {
+            super.rightMouseDown(with: event)
+        }
     }
 }
 
