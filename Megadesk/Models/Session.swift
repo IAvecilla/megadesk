@@ -45,8 +45,8 @@ struct Session: Identifiable, Codable {
     }
 
     /// Returns true if the given PID has at least one child process.
-    /// Uses proc_listchildpids (libproc) because sysctl(KERN_PROC_PPID)
-    /// returns EOPNOTSUPP on macOS Sequoia+.
+    /// Uses proc_listchildpids to list child PIDs into a buffer —
+    /// returns the number of bytes filled, so > 0 means at least one child exists.
     private func hasChildProcess(parentPid: Int32) -> Bool {
         var pid: pid_t = 0
         let bytes = proc_listchildpids(parentPid, &pid, Int32(MemoryLayout<pid_t>.size))
