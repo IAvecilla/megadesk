@@ -68,7 +68,7 @@ struct TerminalFocuser {
                         \(matchCondition) then
                             select tab t
                             focus term
-                            activate window w
+                            activate
                             return true
                         end if
                     end repeat
@@ -78,7 +78,23 @@ struct TerminalFocuser {
         end tell
         """
 
-        return runAppleScript(script, permissionTerminal: "Ghostty")
+        let found = runAppleScript(script, permissionTerminal: "Ghostty")
+        if found {
+            // AppleScript `activate` alone doesn't always transfer keyboard focus
+            // when triggered from a non-activating panel click. Resign key on the
+            // Megadesk panel first, then force-activate Ghostty.
+            if let panel = NSApp.keyWindow {
+                panel.resignKey()
+            }
+            if let ghostty = NSRunningApplication.runningApplications(withBundleIdentifier: "com.mitchellh.ghostty").first {
+                if #available(macOS 14.0, *) {
+                    ghostty.activate(from: NSRunningApplication.current)
+                } else {
+                    ghostty.activate(options: .activateIgnoringOtherApps)
+                }
+            }
+        }
+        return found
     }
 
     private static func runAppleScript(_ source: String, permissionTerminal: String) -> Bool {
