@@ -223,8 +223,6 @@ final class StatusStore {
             // Reload every tick as a fallback — small JSON files, negligible cost.
             // The file watcher handles instant updates; this catches any missed events.
             self?.loadSessions()
-            // Refresh child-process cache for sessions that might need the check.
-            self?.refreshChildProcessCache()
             // Every 10 seconds, ask iTerm2 which tabs are still alive and remove orphaned cards.
             if (self?.tick ?? 0) % 10 == 0 {
                 self?.checkOrphanedSessions()
@@ -234,16 +232,6 @@ final class StatusStore {
                 self?.syncActiveSession()
             }
         }
-    }
-
-    private func refreshChildProcessCache() {
-        let pids: Set<Int32> = Set(sessions.compactMap { s in
-            guard s.isWorking && s.lastEvent == "PreToolUse",
-                  let pid = s.claudePid else { return nil }
-            return pid
-        })
-        guard !pids.isEmpty else { return }
-        ChildProcessCache.shared.refresh(pids: pids)
     }
 
     private func syncActiveSession() {

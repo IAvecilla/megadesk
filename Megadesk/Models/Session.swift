@@ -1,56 +1,5 @@
 import Foundation
-
-/// Caches child-process counts so that `Session.needsConfirmation` never
-/// spawns a process on the main thread.  StatusStore calls `refresh(pids:)`
-/// every second from its timer; the actual `pgrep` calls run on a background
-/// queue and the results are swapped in atomically.
-final class ChildProcessCache {
-    static let shared = ChildProcessCache()
-
-    private let queue = DispatchQueue(label: "megadesk.childproc", qos: .utility)
-    private var cache: [Int32: Int] = [:]
-    private let lock = NSLock()
-
-    func childCount(pid: Int32) -> Int {
-        lock.lock()
-        defer { lock.unlock() }
-        return cache[pid] ?? 0
-    }
-
-    /// Called by StatusStore on its 1-second timer.
-    func refresh(pids: Set<Int32>) {
-        queue.async { [weak self] in
-            var results: [Int32: Int] = [:]
-            for pid in pids {
-                results[pid] = Self.pgrepChildCount(pid: pid)
-            }
-            self?.lock.lock()
-            self?.cache = results
-            self?.lock.unlock()
-        }
-    }
-
-    /// Uses `pgrep -P` because sysctl(KERN_PROC_PPID) returns EOPNOTSUPP on
-    /// macOS Sequoia+.
-    private static func pgrepChildCount(pid: Int32) -> Int {
-        let pipe = Pipe()
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
-        proc.arguments = ["-P", "\(pid)"]
-        proc.standardOutput = pipe
-        proc.standardError = FileHandle.nullDevice
-        do {
-            try proc.run()
-            proc.waitUntilExit()
-            guard proc.terminationStatus == 0 else { return 0 }
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            let output = String(data: data, encoding: .utf8) ?? ""
-            return output.split(separator: "\n").count
-        } catch {
-            return 0
-        }
-    }
-}
+import Darwin
 
 struct Session: Identifiable, Codable {
     let sessionId: String
@@ -63,7 +12,6 @@ struct Session: Identifiable, Codable {
     let lastEvent: String
     let itermSessionId: String
     let claudePid: Int32?
-    let childCount: Int
 
     var id: String { sessionId }
 
@@ -82,25 +30,27 @@ struct Session: Identifiable, Codable {
     }
 
     /// True when Claude is waiting for the user to approve/deny a tool call.
-    /// Compares the child-process count at PreToolUse time (snapshotted by the hook)
-    /// against the live count (cached by StatusStore). If new children appeared,
-    /// the tool started executing. If the count is unchanged, it's still waiting
-    /// for user confirmation.
-    /// For non-Bash tools (Agent, etc.) that run in-process without spawning
-    /// children, a longer timeout avoids false positives.
+    /// For non-Bash tools: >4s since PreToolUse with no update is conclusive.
+    /// For Bash: checks the process tree — when the confirmation dialog is showing,
+    /// Bash hasn't launched yet so there's no child process under claude.
+    /// When Bash is legitimately running it appears as a child of the claude process.
     var needsConfirmation: Bool {
         guard isWorking && lastEvent == "PreToolUse" else { return false }
-        let elapsed = Date().timeIntervalSince1970 - lastUpdated
-        guard elapsed > 4 else { return false }
-        guard let pid = claudePid else { return false }
-        let liveCount = ChildProcessCache.shared.childCount(pid: pid)
-        // More children now than at PreToolUse → tool started executing
-        if liveCount > childCount {
-            return false
+        guard Date().timeIntervalSince1970 - lastUpdated > 4 else { return false }
+        if toolName == "Bash" {
+            guard let pid = claudePid else { return false }
+            return !hasChildProcess(parentPid: pid)
         }
-        // Same or fewer children: for Bash this means confirmation dialog is showing.
-        // For other tools, use a longer timeout since they may run in-process.
-        return toolName == "Bash" || elapsed > 30
+        return true
+    }
+
+    /// Returns true if the given PID has at least one child process.
+    /// Uses proc_listchildpids (libproc) because sysctl(KERN_PROC_PPID)
+    /// returns EOPNOTSUPP on macOS Sequoia+.
+    private func hasChildProcess(parentPid: Int32) -> Bool {
+        var pid: pid_t = 0
+        let bytes = proc_listchildpids(parentPid, &pid, Int32(MemoryLayout<pid_t>.size))
+        return bytes > 0
     }
 
     /// Session has been in "waiting" state for longer than the configured threshold — effectively idle.
@@ -119,21 +69,5 @@ struct Session: Identifiable, Codable {
         case lastEvent = "last_event"
         case itermSessionId = "iterm_session_id"
         case claudePid = "claude_pid"
-        case childCount = "child_count"
-    }
-
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        sessionId = try c.decode(String.self, forKey: .sessionId)
-        cwd = try c.decode(String.self, forKey: .cwd)
-        state = try c.decode(String.self, forKey: .state)
-        stateSince = try c.decode(Double.self, forKey: .stateSince)
-        createdAt = try c.decodeIfPresent(Double.self, forKey: .createdAt)
-        lastUpdated = try c.decode(Double.self, forKey: .lastUpdated)
-        toolName = try c.decode(String.self, forKey: .toolName)
-        lastEvent = try c.decode(String.self, forKey: .lastEvent)
-        itermSessionId = try c.decode(String.self, forKey: .itermSessionId)
-        claudePid = try c.decodeIfPresent(Int32.self, forKey: .claudePid)
-        childCount = try c.decodeIfPresent(Int.self, forKey: .childCount) ?? 0
     }
 }
