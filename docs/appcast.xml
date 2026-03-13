@@ -14,7 +14,7 @@
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
             <sparkle:releaseNotesLink>https://github.com/saugon/megadesk/releases/tag/v0.6.0</sparkle:releaseNotesLink>
             <enclosure
-                url="https://github.com/saugon/megadesk/releases/download/v0.6.0/megadesk-0.6.0.dmg"
+                url="https://github.com/saugon/megadesk/releases/download/v0.6.0/Megadesk.dmg"
                 sparkle:edSignature="xAIHeIGLv4iqDLVJ728e+6V27nbnDJUJ8nKErdSH5GL5LD4XyCdTBw+ia14WlQwxzA1nLsS797Pyr6DSE5eXAQ=="
                 length="1545532"
                 type="application/octet-stream" />
