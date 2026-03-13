@@ -36,10 +36,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setupMenuBar()
         registerGlobalHotKey()
 
-        if UserDefaults.standard.bool(forKey: "megadesk.onboardingComplete") {
+        let storedVersion = UserDefaults.standard.integer(forKey: "megadesk.onboardingVersion")
+        if storedVersion >= OnboardingView.currentOnboardingVersion {
             windowController?.show()
         } else {
-            onboardingController = OnboardingWindowController {
+            let isReturningUser = UserDefaults.standard.bool(forKey: "megadesk.onboardingComplete")
+            onboardingController = OnboardingWindowController(isReturningUser: isReturningUser) {
                 self.onboardingController = nil
                 self.windowController?.show()
             }

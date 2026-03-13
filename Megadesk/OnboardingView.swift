@@ -2,7 +2,10 @@ import AppKit
 import SwiftUI
 
 struct OnboardingView: View {
+    static let currentOnboardingVersion = 2
+
     var onFinish: () -> Void
+    var isReturningUser: Bool = false
 
     @State private var hookDone = HookInstaller.isInstalled()
     @State private var itermState: TerminalPermissionState = .unknown
@@ -21,44 +24,57 @@ struct OnboardingView: View {
                         .resizable()
                         .frame(width: 64, height: 64)
                 }
-                Text("Welcome to Megadesk")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-                Text("Two quick steps to get started")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-            }
-
-            // Step 1: Install hook
-            StepCard(
-                number: 1,
-                title: "Connect Claude Code",
-                description: "Adds a hook to ~/.claude/settings.json to track session activity.",
-                buttonLabel: "Install Hook",
-                isDone: hookDone,
-                isDisabled: false
-            ) {
-                do {
-                    try HookInstaller.install()
-                    hookDone = true
-                } catch {
-                    // silently ignore; user can retry
+                if isReturningUser {
+                    Text("What's New")
+                        .font(.title2)
+                        .fontWeight(.semibold)
+                    Text("Megadesk now supports Ghostty! Grant terminal access below.")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                } else {
+                    Text("Welcome to Megadesk")
+                        .font(.title2)
+                        .fontWeight(.semibold)
+                    Text("Two quick steps to get started")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
                 }
             }
 
-            // Step 2: Terminal AppleScript permissions
+            if !isReturningUser {
+                // Step 1: Install hook
+                StepCard(
+                    number: 1,
+                    title: "Connect Claude Code",
+                    description: "Adds a hook to ~/.claude/settings.json to track session activity.",
+                    buttonLabel: "Install Hook",
+                    isDone: hookDone,
+                    isDisabled: false
+                ) {
+                    do {
+                        try HookInstaller.install()
+                        hookDone = true
+                    } catch {
+                        // silently ignore; user can retry
+                    }
+                }
+            }
+
+            // Terminal AppleScript permissions
             TerminalPermissionCard(
-                number: 2,
-                isDisabled: !hookDone,
+                number: isReturningUser ? 1 : 2,
+                isDisabled: !isReturningUser && !hookDone,
                 itermState: $itermState,
                 ghosttyState: $ghosttyState
             )
 
             Button("Continue") {
                 UserDefaults.standard.set(true, forKey: "megadesk.onboardingComplete")
+                UserDefaults.standard.set(Self.currentOnboardingVersion, forKey: "megadesk.onboardingVersion")
                 onFinish()
             }
-            .disabled(!hookDone)
+            .disabled(!isReturningUser && !hookDone)
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
         }
