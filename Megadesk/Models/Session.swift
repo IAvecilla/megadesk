@@ -39,26 +39,42 @@ struct Session: Identifiable, Codable {
 
     /// True when Claude is waiting for the user to approve/deny a tool call.
     /// For non-Bash tools: >4s since PreToolUse with no update is conclusive.
-    /// For Bash: checks the process tree — when the confirmation dialog is showing,
-    /// Bash hasn't launched yet so there's no child process under claude.
-    /// When Bash is legitimately running it appears as a child of the claude process.
+    /// For Bash: checks whether any child process was spawned *after* the PreToolUse
+    /// timestamp. MCP servers (GitHub, sourcekit-lsp, etc.) are long-running children
+    /// started at session begin, so they must be excluded from the check.
     var needsConfirmation: Bool {
         guard isWorking && lastEvent == "PreToolUse" else { return false }
         guard Date().timeIntervalSince1970 - lastUpdated > 4 else { return false }
         if toolName == "Bash" {
             guard let pid = claudePid else { return false }
-            return !hasChildProcess(parentPid: pid)
+            return !hasChildStartedAfter(parentPid: pid, timestamp: lastUpdated)
         }
         return true
     }
 
-    /// Returns true if the given PID has at least one child process.
-    /// Uses proc_listchildpids to list child PIDs into a buffer —
-    /// returns the number of bytes filled, so > 0 means at least one child exists.
-    private func hasChildProcess(parentPid: Int32) -> Bool {
-        var pid: pid_t = 0
-        let bytes = proc_listchildpids(parentPid, &pid, Int32(MemoryLayout<pid_t>.size))
-        return bytes > 0
+    /// Returns true if any child of `parentPid` was started after `timestamp`.
+    /// Uses proc_listchildpids to enumerate children, then proc_pidinfo to
+    /// read each child's start time.
+    private func hasChildStartedAfter(parentPid: Int32, timestamp: Double) -> Bool {
+        let maxChildren = 64
+        let buffer = UnsafeMutablePointer<pid_t>.allocate(capacity: maxChildren)
+        defer { buffer.deallocate() }
+
+        let bytes = proc_listchildpids(parentPid, buffer, Int32(maxChildren * MemoryLayout<pid_t>.size))
+        guard bytes > 0 else { return false }
+
+        let count = Int(bytes) / MemoryLayout<pid_t>.size
+        for i in 0..<count {
+            var info = proc_bsdinfo()
+            let infoSize = Int32(MemoryLayout<proc_bsdinfo>.size)
+            if proc_pidinfo(buffer[i], PROC_PIDTBSDINFO, 0, &info, infoSize) == infoSize {
+                let startTime = Double(info.pbi_start_tvsec) + Double(info.pbi_start_tvusec) / 1_000_000.0
+                if startTime > timestamp {
+                    return true
+                }
+            }
+        }
+        return false
     }
 
     /// Session has been in "waiting" state for longer than the configured threshold — effectively idle.
