@@ -9,14 +9,14 @@
         <item>
             <title>Version 0.6.0</title>
             <pubDate>Fri, 13 Mar 2026 12:00:00 +0000</pubDate>
-            <sparkle:version>134</sparkle:version>
+            <sparkle:version>136</sparkle:version>
             <sparkle:shortVersionString>0.6.0</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
             <sparkle:releaseNotesLink>https://github.com/saugon/megadesk/releases/tag/v0.6.0</sparkle:releaseNotesLink>
             <enclosure
                 url="https://github.com/saugon/megadesk/releases/download/v0.6.0/megadesk-0.6.0.dmg"
-                sparkle:edSignature="4pLuV+ZV3MJp/wveNkvz2K57Ro4X/0Q45B2FBLRcQMxWNbyGFEdtJodY65uETGIWMZTWBT/cr9Tj6ReUAWFGDg=="
-                length="1551279"
+                sparkle:edSignature="xAIHeIGLv4iqDLVJ728e+6V27nbnDJUJ8nKErdSH5GL5LD4XyCdTBw+ia14WlQwxzA1nLsS797Pyr6DSE5eXAQ=="
+                length="1545532"
                 type="application/octet-stream" />
         </item>
 
