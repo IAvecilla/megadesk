@@ -65,8 +65,24 @@ private struct HeightMeasuringScrollView<Content: View, Footer: View>: View {
 
 /// NSPanel subclass that can become the key window, enabling TextField keyboard input
 /// without activating the application (handled separately per edit session).
+/// Also serves the context menu (right-click) on the panel background.
 private final class EditablePanel: NSPanel {
     override var canBecomeKey: Bool { true }
+
+    override func rightMouseDown(with event: NSEvent) {
+        guard let menu = menu, let contentView else { return super.rightMouseDown(with: event) }
+        // Only show the panel menu on empty background — not on cards/PRs
+        // (those will get their own context menus later).
+        let loc = contentView.convert(event.locationInWindow, from: nil)
+        let hitView = contentView.hitTest(loc)
+        // If the click landed on the hosting view itself (background), show the menu.
+        // If it landed on a subview (card content), let it handle the event.
+        if hitView === contentView || hitView == nil {
+            NSMenu.popUpContextMenu(menu, with: event, for: contentView)
+        } else {
+            super.rightMouseDown(with: event)
+        }
+    }
 }
 
 extension Notification.Name {
@@ -84,6 +100,7 @@ final class FloatingWindowController: NSWindowController {
     private var userSetHeight: CGFloat? = nil  // nil = auto-height; non-nil = user-locked
     private var lastKnownHeight: CGFloat = 120 // tracks last applied height to detect real user changes
     private var resetHeightButton: NSButton?
+    private var gearButton: TitlebarGearButton?
     private var isLiveResizing = false
 
     convenience init(contentView: some View, footerView: some View) {
@@ -244,6 +261,30 @@ final class FloatingWindowController: NSWindowController {
         resetBtn.isHidden = (userSetHeight == nil)
         titlebarView.addSubview(resetBtn)
         self.resetHeightButton = resetBtn
+
+        // Gear button — right side of the titlebar, opens the app menu
+        let gearSize: CGFloat = 18
+        let gearFrame = NSRect(
+            x: titlebarView.bounds.width - gearSize - 10,
+            y: sysClose.frame.midY - gearSize / 2,
+            width: gearSize, height: gearSize
+        )
+        let gear = TitlebarGearButton(frame: gearFrame)
+        gear.autoresizingMask = [.minXMargin]  // stay pinned to the right edge
+        gear.target = self
+        gear.action = #selector(gearPressed(_:))
+        titlebarView.addSubview(gear)
+        self.gearButton = gear
+    }
+
+    @objc private func gearPressed(_ sender: NSButton) {
+        guard let menu = window?.menu else { return }
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height + 2), in: sender)
+    }
+
+    /// Sets the menu used by the gear button and right-click context menu.
+    func setMenu(_ menu: NSMenu) {
+        window?.menu = menu
     }
 
     @objc private func customClosePressed() {
@@ -523,6 +564,55 @@ private final class TitlebarResetButton: NSButton {
             let dnPath = NSBezierPath()
             dnPath.move(to: dnTip); dnPath.line(to: dnLeft); dnPath.line(to: dnRight)
             dnPath.close(); dnPath.fill()
+        }
+    }
+}
+
+/// An NSButton that draws a gear icon, visible on hover.
+private final class TitlebarGearButton: NSButton {
+
+    private var trackingArea: NSTrackingArea?
+    private var isHovered = false {
+        didSet { needsDisplay = true }
+    }
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        isBordered = false
+        bezelStyle = .circular
+        title = ""
+        wantsLayer = true
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let old = trackingArea { removeTrackingArea(old) }
+        let area = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeAlways],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+        trackingArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) { isHovered = true }
+    override func mouseExited(with event: NSEvent)  { isHovered = false }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let alpha: CGFloat = isHovered ? 0.85 : 0.35
+        let sizeConfig = NSImage.SymbolConfiguration(pointSize: bounds.height * 0.7, weight: .medium)
+        let colorConfig = NSImage.SymbolConfiguration(paletteColors: [NSColor.white.withAlphaComponent(alpha)])
+        let config = sizeConfig.applying(colorConfig)
+        if let image = NSImage(systemSymbolName: "gearshape.fill", accessibilityDescription: "Settings")?
+            .withSymbolConfiguration(config) {
+            let imageSize = image.size
+            let x = (bounds.width - imageSize.width) / 2
+            let y = (bounds.height - imageSize.height) / 2
+            image.draw(in: NSRect(x: x, y: y, width: imageSize.width, height: imageSize.height))
         }
     }
 }

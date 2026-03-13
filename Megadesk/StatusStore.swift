@@ -33,6 +33,12 @@ final class StatusStore {
     // kqueue-based process watchers: itermSessionId → DispatchSourceProcess
     private var processSources: [String: DispatchSourceProcess] = [:]
 
+    // Caches of active terminal session IDs, updated by checkOrphanedSessions every 10s.
+    // Used by reapDeadSessions to avoid removing sessions whose terminal tab is still
+    // alive (e.g. PID is stale after a Claude restart).
+    private var lastKnownActiveItermIds: Set<String> = []
+    private var lastKnownActiveGhosttyIds: Set<String> = []
+
     // JSONL watchers: sessionId → JSONLWatcher
     var activeToolDetails: [String: String] = [:]
     private var jsonlWatchers: [String: JSONLWatcher] = [:]
@@ -75,20 +81,25 @@ final class StatusStore {
 
     @discardableResult
     func focusTerminal(session: Session) -> Bool {
-        // Fallback sessions (itermSessionId == sessionId) have no associated iTerm2 tab —
-        // $ITERM_SESSION_ID wasn't available (e.g. tmux without the env var, or non-iTerm2
-        // terminal). We can't focus them but they're not "not found" either.
-        guard session.itermSessionId != session.sessionId else {
+        // Unknown terminals without a real session ID can't be focused
+        if session.itermSessionId == session.sessionId && session.terminal == .unknown {
             activeSessionId = session.sessionId
             return true
         }
 
-        let found = TerminalFocuser.focusiTerm2(sessionId: session.itermSessionId)
+        let found = TerminalFocuser.focus(session: session)
 
-        // For tmux sessions the stored iterm_session_id is "{UUID}:{tmux_pane}".
-        // If focus fails it means the *original* iTerm2 tab was closed (e.g. after
-        // detach/reattach), but Claude is still running inside tmux — don't delete the card.
-        if !found && session.itermSessionId.contains(":") {
+        // Tmux sessions may outlive their original terminal tab — don't remove the card
+        if !found && session.terminal == .iterm2 && session.itermSessionId.contains(":") {
+            activeSessionId = session.sessionId
+            return true
+        }
+
+        // Fallback: just activate the app if precise focus fails
+        if !found && session.terminal == .ghostty {
+            if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.mitchellh.ghostty") {
+                NSWorkspace.shared.open(url)
+            }
             activeSessionId = session.sessionId
             return true
         }
@@ -151,7 +162,7 @@ final class StatusStore {
             loaded.append(session)
         }
 
-        // Deduplicate by iTerm session ID — one terminal tab = one card
+        // Deduplicate by terminal session ID — one terminal tab = one card
         var seen: [String: Session] = [:]
         for s in loaded {
             if let existing = seen[s.itermSessionId] {
@@ -174,15 +185,25 @@ final class StatusStore {
                 let p0 = urgencyPriority($0), p1 = urgencyPriority($1)
                 if p0 != p1 { return p0 < p1 }
                 if p0 == 3 { return $0.timeInState < $1.timeInState }
-                return $0.projectName < $1.projectName
+                if $0.projectName != $1.projectName { return $0.projectName < $1.projectName }
+                return $0.sessionId < $1.sessionId
             }
         case .byActivity:
-            return list.sorted { $0.lastUpdated > $1.lastUpdated }
+            return list.sorted {
+                if $0.lastUpdated != $1.lastUpdated { return $0.lastUpdated > $1.lastUpdated }
+                return $0.sessionId < $1.sessionId
+            }
         case .byName:
-            return list.sorted { $0.projectName < $1.projectName }
+            return list.sorted {
+                if $0.projectName != $1.projectName { return $0.projectName < $1.projectName }
+                return $0.sessionId < $1.sessionId
+            }
         case .byCreation:
             return list.sorted {
-                ($0.createdAt ?? $0.stateSince) < ($1.createdAt ?? $1.stateSince)
+                let t0 = $0.createdAt ?? $0.stateSince
+                let t1 = $1.createdAt ?? $1.stateSince
+                if t0 != t1 { return t0 < t1 }
+                return $0.sessionId < $1.sessionId
             }
         }
     }
@@ -223,26 +244,49 @@ final class StatusStore {
             // Reload every tick as a fallback — small JSON files, negligible cost.
             // The file watcher handles instant updates; this catches any missed events.
             self?.loadSessions()
-            // Every 10 seconds, ask iTerm2 which tabs are still alive and remove orphaned cards.
+            // Every 10 seconds, check for orphaned sessions and reap dead ones.
             if (self?.tick ?? 0) % 10 == 0 {
+                self?.reapDeadSessions()
                 self?.checkOrphanedSessions()
             }
-            // Every 2 seconds, sync the active session indicator with iTerm2's current tab.
-            if (self?.tick ?? 0) % 2 == 0 {
-                self?.syncActiveSession()
-            }
+            // Every 2 seconds, sync the active session indicator with the current terminal tab.
+            if (self?.tick ?? 0) % 2 == 0 { self?.syncActiveSession() }
         }
     }
 
+    private var hasItermSessions: Bool {
+        sessions.contains { $0.terminal == .iterm2 && $0.itermSessionId != $0.sessionId }
+    }
+
+    private var hasGhosttySessions: Bool {
+        sessions.contains { $0.terminal == .ghostty }
+    }
+
     private func syncActiveSession() {
-        detectCurrentItermSession { [weak self] currentId in
-            DispatchQueue.main.async {
-                guard let self, let currentId else { return }
-                guard let match = self.sessions.first(where: {
-                    $0.itermSessionId.components(separatedBy: ":").first == currentId
-                }) else { return }
-                if self.activeSessionId != match.sessionId {
-                    self.activeSessionId = match.sessionId
+        if hasItermSessions {
+            detectCurrentItermSession { [weak self] currentId in
+                DispatchQueue.main.async {
+                    guard let self, let currentId else { return }
+                    guard let match = self.sessions.first(where: {
+                        $0.itermSessionId.components(separatedBy: ":").first == currentId
+                    }) else { return }
+                    if self.activeSessionId != match.sessionId {
+                        self.activeSessionId = match.sessionId
+                    }
+                }
+            }
+        }
+
+        if hasGhosttySessions {
+            detectCurrentGhosttySession { [weak self] terminalId in
+                DispatchQueue.main.async {
+                    guard let self, let terminalId else { return }
+                    guard let match = self.sessions.first(where: {
+                        $0.terminal == .ghostty && $0.ghosttyTerminalId == terminalId
+                    }) else { return }
+                    if self.activeSessionId != match.sessionId {
+                        self.activeSessionId = match.sessionId
+                    }
                 }
             }
         }
@@ -294,11 +338,9 @@ final class StatusStore {
             guard let pid = session.claudePid,
                   processSources[session.itermSessionId] == nil else { continue }
 
-            // If already dead, remove immediately
-            guard kill(pid_t(pid), 0) == 0 || errno == EPERM else {
-                removeSessionFiles(withItermId: session.itermSessionId)
-                continue
-            }
+            // If already dead, skip — reapDeadSessions or checkOrphanedSessions will
+            // handle cleanup with proper terminal tab checks to avoid false removals.
+            guard kill(pid_t(pid), 0) == 0 || errno == EPERM else { continue }
 
             let itermId = session.itermSessionId
             let source = DispatchSource.makeProcessSource(
@@ -307,6 +349,7 @@ final class StatusStore {
                 queue: .main
             )
             source.setEventHandler { [weak self] in
+                print("[Megadesk] kqueue: PID \(pid) exited for \(itermId) — removing session")
                 self?.processSources.removeValue(forKey: itermId)
                 self?.removeSessionFiles(withItermId: itermId)
             }
@@ -315,13 +358,85 @@ final class StatusStore {
         }
     }
 
-    /// Queries iTerm2 for all active session IDs and removes session files whose
-    /// iTerm2 tab no longer exists (e.g. the user closed the terminal tab).
+    /// Safety net: removes sessions whose Claude process is dead or unknown.
+    /// Catches: kqueue failures, PID recycling, missing claudePid (old hook),
+    /// and fallback sessions that the orphan checker skips.
+    /// Skips sessions whose terminal tab is still alive — a dead stored PID may
+    /// just mean Claude was restarted and the hook hasn't fired yet.
+    private func reapDeadSessions() {
+        let staleThreshold = Date().timeIntervalSince1970 - 120
+        var deadIds: [String] = []
+        for session in sessions {
+            if let pid = session.claudePid {
+                // Has a PID — check if the process is still alive.
+                if kill(pid_t(pid), 0) != 0 && errno != EPERM {
+                    // PID is dead, but don't remove if the terminal tab is still open —
+                    // a new Claude process may have started that hasn't fired hooks yet.
+                    if isTerminalTabAlive(session) {
+                        print("[Megadesk] reapDeadSessions: PID \(pid) dead for \(session.projectName) but terminal tab still alive — skipping")
+                        continue
+                    }
+                    print("[Megadesk] reapDeadSessions: removing \(session.projectName) (PID \(pid) dead, tab gone)")
+                    processSources[session.itermSessionId]?.cancel()
+                    processSources.removeValue(forKey: session.itermSessionId)
+                    deadIds.append(session.itermSessionId)
+                }
+            } else if session.lastUpdated < staleThreshold {
+                // No PID at all (old hook version) — remove if stale.
+                if isTerminalTabAlive(session) { continue }
+                print("[Megadesk] reapDeadSessions: removing \(session.projectName) (no PID, stale)")
+                deadIds.append(session.itermSessionId)
+            }
+        }
+        for id in deadIds {
+            removeSessionFiles(withItermId: id)
+        }
+    }
+
+    /// Returns true if the session's terminal tab is still open, based on the
+    /// cached active IDs from the last checkOrphanedSessions() run.
+    private func isTerminalTabAlive(_ session: Session) -> Bool {
+        switch session.terminal {
+        case .iterm2:
+            let bareId = session.itermSessionId.components(separatedBy: ":").first ?? session.itermSessionId
+            return !lastKnownActiveItermIds.isEmpty && lastKnownActiveItermIds.contains(bareId)
+        case .ghostty:
+            return !lastKnownActiveGhosttyIds.isEmpty && lastKnownActiveGhosttyIds.contains(session.ghosttyTerminalId)
+        case .unknown:
+            return false
+        }
+    }
+
+    /// Returns true if the session's Claude process is still running.
+    private func isClaudePidAlive(_ session: Session) -> Bool {
+        guard let pid = session.claudePid else { return false }
+        return kill(pid_t(pid), 0) == 0 || errno == EPERM
+    }
+
+    /// Queries iTerm2 and Ghostty for active terminal sessions and removes
+    /// session files whose terminal tab no longer exists.
     private func checkOrphanedSessions() {
-        // Skip for the first 30s after launch — iTerm2 may return an incomplete
+        // Skip for the first 30s after launch — terminals may return an incomplete
         // session list immediately after Megadesk restarts, causing false deletions.
         guard Date().timeIntervalSince(startupTime) > 30 else { return }
+        guard hasItermSessions || hasGhosttySessions else { return }
+
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let itermIds = self?.hasItermSessions == true ? Self.queryItermSessionIds() : []
+            let ghosttyIds = self?.hasGhosttySessions == true ? Self.queryGhosttyTerminalIds() : []
+
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.lastKnownActiveItermIds = itermIds
+                self.lastKnownActiveGhosttyIds = ghosttyIds
+                self.removeOrphanedSessions(activeItermIds: itermIds, activeGhosttyIds: ghosttyIds)
+            }
+        }
+    }
+
+    private static func queryItermSessionIds() -> Set<String> {
         let script = """
+        if application "iTerm2" is not running then return {}
         tell application "iTerm2"
             set ids to {}
             repeat with w in windows
@@ -334,52 +449,77 @@ final class StatusStore {
             return ids
         end tell
         """
+        var error: NSDictionary?
+        guard let result = NSAppleScript(source: script)?.executeAndReturnError(&error) else {
+            if let error { print("[Megadesk] queryItermSessionIds AppleScript error: \(error)") }
+            return []
+        }
+        var ids: Set<String> = []
+        let count = result.numberOfItems
+        if count > 0 {
+            for i in 1...count {
+                if let val = result.atIndex(i)?.stringValue { ids.insert(val) }
+            }
+        }
+        return ids
+    }
 
-        DispatchQueue.global(qos: .utility).async { [weak self] in
-            let appleScript = NSAppleScript(source: script)
-            var error: NSDictionary?
-            guard let result = appleScript?.executeAndReturnError(&error) else { return }
+    private static func queryGhosttyTerminalIds() -> Set<String> {
+        let script = """
+        if application "Ghostty" is not running then return {}
+        tell application "Ghostty"
+            set ids to {}
+            repeat with w in windows
+                repeat with t in tabs of w
+                    repeat with term in terminals of t
+                        set end of ids to (id of term)
+                    end repeat
+                end repeat
+            end repeat
+            return ids
+        end tell
+        """
+        var error: NSDictionary?
+        guard let result = NSAppleScript(source: script)?.executeAndReturnError(&error) else {
+            if let error { print("[Megadesk] queryGhosttyTerminalIds AppleScript error: \(error)") }
+            return []
+        }
+        var ids: Set<String> = []
+        let count = result.numberOfItems
+        if count > 0 {
+            for i in 1...count {
+                if let val = result.atIndex(i)?.stringValue { ids.insert(val) }
+            }
+        }
+        return ids
+    }
 
-            var activeIds: Set<String> = []
-            let count = result.numberOfItems
-            if count > 0 {
-                for i in 1...count {
-                    if let val = result.atIndex(i)?.stringValue {
-                        activeIds.insert(val)
-                    }
+    private func removeOrphanedSessions(activeItermIds: Set<String>, activeGhosttyIds: Set<String>) {
+        let staleThreshold = Date().timeIntervalSince1970 - 120
+
+        let orphanedIds = sessions
+            .filter { s in
+                guard s.lastUpdated < staleThreshold && !isClaudePidAlive(s) else { return false }
+                switch s.terminal {
+                case .iterm2:
+                    let bareId = s.itermSessionId.components(separatedBy: ":").first ?? s.itermSessionId
+                    return s.itermSessionId != s.sessionId && !activeItermIds.contains(bareId)
+                case .ghostty:
+                    guard !s.ghosttyTerminalId.isEmpty else { return false }
+                    return !activeGhosttyIds.contains(s.ghosttyTerminalId)
+                case .unknown:
+                    return false
                 }
             }
+            .map(\.itermSessionId)
 
-            // If we got no IDs back, play it safe — iTerm2 might have no windows open
-            // or returned an unexpected result. Don't wipe everything.
-            guard !activeIds.isEmpty else { return }
-
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                // Collect iTerm session IDs that are no longer present in iTerm2.
-                // Skip fallback sessions (itermSessionId == sessionId) — those aren't iTerm2 sessions.
-                // Also skip recently-updated sessions: inside tmux $ITERM_SESSION_ID can be stale
-                // (e.g. after detach/reattach), but Claude is still actively writing hook events.
-                let staleThreshold = Date().timeIntervalSince1970 - 120
-                let orphanedItermIds = self.sessions
-                    .filter { s in
-                        // Strip tmux pane suffix (format: "{iterm_uuid}:{tmux_pane}") before
-                        // comparing against iTerm2 active IDs, which only know the bare UUID.
-                        let bareId = s.itermSessionId.components(separatedBy: ":").first ?? s.itermSessionId
-                        return s.itermSessionId != s.sessionId &&
-                            !activeIds.contains(bareId) &&
-                            s.lastUpdated < staleThreshold
-                    }
-                    .map(\.itermSessionId)
-
-                for itermId in orphanedItermIds {
-                    self.removeSessionFiles(withItermId: itermId)
-                }
-            }
+        for id in orphanedIds {
+            print("[Megadesk] checkOrphanedSessions: removing \(id) (tab gone, stale, PID dead)")
+            removeSessionFiles(withItermId: id)
         }
     }
 
-    /// Deletes all session JSON files that belong to the given iTerm2 session ID,
+    /// Deletes all session JSON files that belong to the given terminal session ID,
     /// then reloads the session list.
     private func removeSessionFiles(withItermId itermId: String) {
         let fm = FileManager.default
@@ -401,8 +541,8 @@ final class StatusStore {
 
     private func cycleSession(forward: Bool) {
         guard !sessions.isEmpty else { return }
-        // If starting a new cycle, seed lastCycleIndex from the already-tracked activeSessionId
-        // (kept up to date by syncActiveSession every 2s) — no async call needed.
+        // Seed lastCycleIndex from the already-tracked activeSessionId
+        // (kept up to date by syncActiveSession every 2s).
         if lastCycleIndex == nil, let activeId = activeSessionId,
            let idx = sessions.firstIndex(where: { $0.sessionId == activeId }) {
             lastCycleIndex = idx
@@ -420,7 +560,7 @@ final class StatusStore {
         }
         lastCycleIndex = next
         let session = sessions[next]
-        focusTerminal(session: session)  // also sets activeSessionId
+        focusTerminal(session: session)
         flashTimer?.invalidate()
         flashTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: false) { [weak self] _ in
             self?.lastCycleIndex = nil
@@ -438,6 +578,20 @@ final class StatusStore {
             var error: NSDictionary?
             let result = appleScript?.executeAndReturnError(&error)
             completion(result?.stringValue)
+        }
+    }
+
+    private func detectCurrentGhosttySession(completion: @escaping (String?) -> Void) {
+        let script = """
+        tell application "Ghostty"
+            return id of focused terminal of selected tab of front window
+        end tell
+        """
+        DispatchQueue.global(qos: .userInitiated).async {
+            let appleScript = NSAppleScript(source: script)
+            var error: NSDictionary?
+            let result = appleScript?.executeAndReturnError(&error)
+            completion(error == nil ? result?.stringValue : nil)
         }
     }
 
@@ -498,8 +652,12 @@ final class StatusStore {
         process.standardOutput = pipe
         process.standardError = Pipe()
 
-        // Watchdog: terminate after 15 seconds
-        let watchdog = DispatchWorkItem { process.terminate() }
+        // Watchdog: terminate after 15 seconds.
+        // Guard against racing with normal completion — terminate() on an
+        // already-finished Process throws NSInvalidArgumentException.
+        let watchdog = DispatchWorkItem {
+            if process.isRunning { process.terminate() }
+        }
         DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 15, execute: watchdog)
 
         DispatchQueue.global(qos: .utility).async { [weak self] in

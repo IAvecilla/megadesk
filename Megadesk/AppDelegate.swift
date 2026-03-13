@@ -171,6 +171,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(updateItem)
         menu.addItem(withTitle: "Quit Megadesk", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         statusItem?.menu = menu
+        windowController?.setMenu(menu)
     }
 
     @objc private func toggleWidget() {

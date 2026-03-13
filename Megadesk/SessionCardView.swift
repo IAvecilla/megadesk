@@ -250,10 +250,9 @@ struct SessionCardView: View {
     // MARK: - Focus / dismiss
 
     private func handleFocus() {
-        // Focus may fail for sessions in tmux, non-iTerm2 terminals, or after
-        // detach/reattach where the iTerm2 session ID becomes stale. Don't delete
-        // the session — it may still be alive. The orphan checker handles truly
-        // dead sessions on a timer.
+        // Focus may fail for tmux sessions or after detach/reattach where the
+        // terminal session ID becomes stale. Don't delete the session — it may
+        // still be alive. The orphan checker handles truly dead sessions on a timer.
         _ = onFocus()
     }
 
