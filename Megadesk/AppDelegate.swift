@@ -166,10 +166,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(.separator())
         let updateItem = NSMenuItem(
             title: "Check for Updates...",
-            action: #selector(SPUUpdater.checkForUpdates),
+            action: #selector(SPUStandardUpdaterController.checkForUpdates(_:)),
             keyEquivalent: ""
         )
-        updateItem.target = updaterController.updater
+        updateItem.target = updaterController
         menu.addItem(updateItem)
         menu.addItem(withTitle: "Quit Megadesk", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         statusItem?.menu = menu
