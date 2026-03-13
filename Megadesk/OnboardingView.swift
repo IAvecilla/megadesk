@@ -5,8 +5,12 @@ struct OnboardingView: View {
     var onFinish: () -> Void
 
     @State private var hookDone = HookInstaller.isInstalled()
-    @State private var terminalDone = false
-    @State private var terminalDenied = false
+    @State private var itermState: TerminalPermissionState = .unknown
+    @State private var ghosttyState: TerminalPermissionState = .unknown
+
+    fileprivate enum TerminalPermissionState {
+        case unknown, granted, denied, notRunning
+    }
 
     var body: some View {
         VStack(spacing: 20) {
@@ -42,41 +46,13 @@ struct OnboardingView: View {
                 }
             }
 
-            // Step 2: Terminal AppleScript permission
-            StepCard(
+            // Step 2: Terminal AppleScript permissions
+            TerminalPermissionCard(
                 number: 2,
-                title: "Allow Terminal Control",
-                description: "Uses AppleScript to focus the right tab when you click a session card. Works with iTerm2 and Ghostty.",
-                buttonLabel: "Grant Access",
-                isDone: terminalDone,
-                isDisabled: !hookDone
-            ) {
-                // Try iTerm2 first, then Ghostty — succeed if either works
-                var errorDict: NSDictionary?
-                NSAppleScript(source: "tell application \"iTerm2\" to get name")?
-                    .executeAndReturnError(&errorDict)
-                let itermOk = errorDict == nil
-
-                var ghosttyError: NSDictionary?
-                NSAppleScript(source: "tell application \"Ghostty\" to get name")?
-                    .executeAndReturnError(&ghosttyError)
-                let ghosttyOk = ghosttyError == nil
-
-                if itermOk || ghosttyOk {
-                    terminalDone = true
-                    terminalDenied = false
-                } else {
-                    terminalDenied = true
-                }
-            }
-
-            if terminalDenied {
-                Text("Focus won't work until you grant access in System Settings → Privacy → Automation")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal)
-            }
+                isDisabled: !hookDone,
+                itermState: $itermState,
+                ghosttyState: $ghosttyState
+            )
 
             Button("Continue") {
                 UserDefaults.standard.set(true, forKey: "megadesk.onboardingComplete")
@@ -88,6 +64,110 @@ struct OnboardingView: View {
         }
         .padding(24)
         .frame(width: 360)
+    }
+}
+
+// MARK: - Terminal Permission Card
+
+private struct TerminalPermissionCard: View {
+    let number: Int
+    let isDisabled: Bool
+    @Binding var itermState: OnboardingView.TerminalPermissionState
+    @Binding var ghosttyState: OnboardingView.TerminalPermissionState
+
+    var body: some View {
+        GroupBox {
+            HStack(alignment: .top, spacing: 12) {
+                Text("\(number)")
+                    .font(.headline)
+                    .fontWeight(.bold)
+                    .foregroundColor(.white)
+                    .frame(width: 24, height: 24)
+                    .background(isDisabled ? Color.secondary : Color.accentColor)
+                    .clipShape(Circle())
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Allow Terminal Control")
+                        .font(.headline)
+                    Text("Grant access to each terminal you use. Megadesk uses AppleScript to focus the right tab when you click a session card.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    VStack(spacing: 6) {
+                        terminalRow(name: "iTerm2", state: itermState) {
+                            itermState = requestPermission(
+                                bundleId: "com.googlecode.iterm2",
+                                scriptName: "iTerm2"
+                            )
+                        }
+                        terminalRow(name: "Ghostty", state: ghosttyState) {
+                            ghosttyState = requestPermission(
+                                bundleId: "com.mitchellh.ghostty",
+                                scriptName: "Ghostty"
+                            )
+                        }
+                    }
+                    .padding(.top, 4)
+                }
+            }
+            .padding(4)
+        }
+        .disabled(isDisabled)
+        .opacity(isDisabled ? 0.5 : 1)
+    }
+
+    @ViewBuilder
+    private func terminalRow(
+        name: String,
+        state: OnboardingView.TerminalPermissionState,
+        action: @escaping () -> Void
+    ) -> some View {
+        HStack {
+            Text(name)
+                .font(.callout)
+            Spacer()
+            switch state {
+            case .granted:
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundColor(.green)
+                    .imageScale(.large)
+            case .denied:
+                HStack(spacing: 6) {
+                    Text("Denied")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Button("Retry", action: action)
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                }
+            case .notRunning:
+                HStack(spacing: 6) {
+                    Text("Not running")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Button("Retry", action: action)
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                }
+            case .unknown:
+                Button("Grant Access", action: action)
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+            }
+        }
+    }
+
+    private func requestPermission(bundleId: String, scriptName: String) -> OnboardingView.TerminalPermissionState {
+        let running = NSWorkspace.shared.runningApplications.contains {
+            $0.bundleIdentifier == bundleId
+        }
+        guard running else { return .notRunning }
+
+        var error: NSDictionary?
+        NSAppleScript(source: "tell application \"\(scriptName)\" to get name")?
+            .executeAndReturnError(&error)
+        return error == nil ? .granted : .denied
     }
 }
 
