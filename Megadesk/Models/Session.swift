@@ -53,15 +53,12 @@ struct Session: Identifiable, Codable {
     }
 
     /// Returns true if the given PID has at least one child process.
-    /// Uses sysctl(KERN_PROC_PPID) which returns only children of the given PID —
-    /// far cheaper than iterating all processes.
+    /// Uses proc_listchildpids to list child PIDs into a buffer —
+    /// returns the number of bytes filled, so > 0 means at least one child exists.
     private func hasChildProcess(parentPid: Int32) -> Bool {
-        // [CTL_KERN=1, KERN_PROC=14, KERN_PROC_PPID=7, parentPid]
-        // KERN_PROC_PPID is not bridged to Swift so use its raw value.
-        var mib: [Int32] = [1, 14, 7, parentPid]
-        var size = 0
-        guard sysctl(&mib, UInt32(mib.count), nil, &size, nil, 0) == 0 else { return false }
-        return size >= MemoryLayout<kinfo_proc>.stride
+        var pid: pid_t = 0
+        let bytes = proc_listchildpids(parentPid, &pid, Int32(MemoryLayout<pid_t>.size))
+        return bytes > 0
     }
 
     /// Session has been in "waiting" state for longer than the configured threshold — effectively idle.
