@@ -39,6 +39,10 @@ final class StatusStore {
     private var lastKnownActiveItermIds: Set<String> = []
     private var lastKnownActiveGhosttyIds: Set<String> = []
 
+    // Guards to prevent AppleScript calls from piling up when terminals are slow to respond.
+    private var isSyncingActiveSession = false
+    private var isCheckingOrphans = false
+
     // JSONL watchers: sessionId → JSONLWatcher
     var activeToolDetails: [String: String] = [:]
     private var jsonlWatchers: [String: JSONLWatcher] = [:]
@@ -263,9 +267,16 @@ final class StatusStore {
     }
 
     private func syncActiveSession() {
+        guard !isSyncingActiveSession else { return }
+        isSyncingActiveSession = true
+
+        let group = DispatchGroup()
+
         if hasItermSessions {
+            group.enter()
             detectCurrentItermSession { [weak self] currentId in
                 DispatchQueue.main.async {
+                    defer { group.leave() }
                     guard let self, let currentId else { return }
                     guard let match = self.sessions.first(where: {
                         $0.itermSessionId.components(separatedBy: ":").first == currentId
@@ -278,8 +289,10 @@ final class StatusStore {
         }
 
         if hasGhosttySessions {
+            group.enter()
             detectCurrentGhosttySession { [weak self] terminalId in
                 DispatchQueue.main.async {
+                    defer { group.leave() }
                     guard let self, let terminalId else { return }
                     guard let match = self.sessions.first(where: {
                         $0.terminal == .ghostty && $0.ghosttyTerminalId == terminalId
@@ -289,6 +302,10 @@ final class StatusStore {
                     }
                 }
             }
+        }
+
+        group.notify(queue: .main) { [weak self] in
+            self?.isSyncingActiveSession = false
         }
     }
 
@@ -420,13 +437,18 @@ final class StatusStore {
         // session list immediately after Megadesk restarts, causing false deletions.
         guard Date().timeIntervalSince(startupTime) > 30 else { return }
         guard hasItermSessions || hasGhosttySessions else { return }
+        guard !isCheckingOrphans else { return }
+        isCheckingOrphans = true
 
+        let checkIterm = hasItermSessions
+        let checkGhostty = hasGhosttySessions
         DispatchQueue.global(qos: .utility).async { [weak self] in
-            let itermIds = self?.hasItermSessions == true ? Self.queryItermSessionIds() : []
-            let ghosttyIds = self?.hasGhosttySessions == true ? Self.queryGhosttyTerminalIds() : []
+            let itermIds = checkIterm ? Self.queryItermSessionIds() : []
+            let ghosttyIds = checkGhostty ? Self.queryGhosttyTerminalIds() : []
 
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
+                self.isCheckingOrphans = false
                 self.lastKnownActiveItermIds = itermIds
                 self.lastKnownActiveGhosttyIds = ghosttyIds
                 self.removeOrphanedSessions(activeItermIds: itermIds, activeGhosttyIds: ghosttyIds)
